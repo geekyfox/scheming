@@ -1,0 +1,24 @@
+(d)
+(c d)
+c
+5
+(e d c b a)
+#f
+#t
+(a b c d e)
+(a b c a d e f)
+((a a a a) (b) (c c) (a a) (d) (e e e e) (f))
+((4 a) (1 b) (2 c) (2 a) (1 d) (4 e))
+((4 a) b (2 c) (2 a) d (4 e))
+(a a a a b c c a a d e e e e)
+((4 a) b (2 c) (2 a) d (4 e))
+(a a b b c c c c d d)
+(a a a b b b c c c)
+(a b d e g h j)
+((a b c) (d e f g h i k))
+(c d e f g)
+#t
+#f
+9
+#f
+#t

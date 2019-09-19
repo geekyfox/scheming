@@ -145,6 +145,18 @@
 (writeln (split '(a b c d e f g h i k) 3))
 
 
+; problem #18
+(define (slice xs i j)
+	(define (impl xs j acc)
+	  	(if (= j 0)
+			(reverse acc)
+			(impl (cdr xs) (- j 1) (cons (car xs) acc))))
+	(if (= i 1)
+		(impl xs j '())
+		(slice (cdr xs) (- i 1) (- j 1))))
+
+ (writeln (slice '(a b c d e f g h i k) 3 7))
+
 
 ; problem #31
 
@@ -170,4 +182,22 @@
 
 (writeln (prime? 7))
 (writeln (prime? 7771))
+
+
+; problem #32
+
+(define (gcd x y)
+	(if (= y 0) x (gcd y (modulo x y))))
+
+(writeln (gcd 36 63))
+
+
+; problem #33
+
+(define (coprime? x y)
+	(= 1 (gcd x y)))
+
+(writeln (coprime? 36 63))
+(writeln (coprime? 35 64))
+
 
