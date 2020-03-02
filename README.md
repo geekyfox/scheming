@@ -1844,7 +1844,7 @@ void syntax_lambda(void) /* syntax: lambda */
 }
 
 
-static struct dict SYNTAX_HANDLERS;
+static struct dict SYNTAX_HANDLERS = {NULL, 0, 0};
 
 void register_syntax_handler(const char* name, syntax_t syntax)
 {
@@ -1980,7 +1980,6 @@ const char* object_typename(struct object* obj)
 
 void setup_syntax(void)
 {
-	bzero(&SYNTAX_HANDLERS, sizeof(struct dict));
 	register_syntax_handler("and", syntax_and);
 	register_syntax_handler("cond", syntax_cond);
 	register_syntax_handler("define", syntax_define);

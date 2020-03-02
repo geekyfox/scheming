@@ -34,7 +34,6 @@ for line in old_content:
 new_content.extend([
     'void setup_syntax(void)\n',
     '{\n',
-    '\tbzero(&SYNTAX_HANDLERS, sizeof(struct dict));\n',
 ])
 for name, func in sorted(keyword_to_func.items()):
     new_content.append(f'\tregister_syntax_handler("{name}", {func});\n')
