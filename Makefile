@@ -1,22 +1,21 @@
-all : gen fmt test README.md
-
-.PHONY: gen
-gen:
-	@mkdir -p build
-	cat scheme.c | utils/gen.py > build/gen.c
-	mv build/gen.c scheme.c
-
-.PHONY: fmt
-fmt:
-	@mkdir -p build
-	cat scheme.c | utils/fmt.py > build/fmt.c
-	mv build/fmt.c scheme.c
-
 .PHONY: test
 test: scheme
 	@mkdir -p build
 	./scheme test/pro99.scm > build/output
 	diff build/output test/expected_output
+
+all : gen test README.md
+
+.PHONY: gen
+gen: build/autogen.stamp
+
+build/autogen.stamp: scheme.c
+	@mkdir -p build
+	cat scheme.c | utils/sym.py > build/sym.c
+	mv build/sym.c scheme.c
+	cat scheme.c | utils/fmt.py > build/fmt.c
+	mv build/fmt.c scheme.c
+	touch build/autogen.stamp
 
 CC = gcc
 CFLAGS = -Wall -g
@@ -30,8 +29,8 @@ cut : build/cut.c
 build/cut.c : scheme.c utils/cut.py
 	cat $< | utils/cut.py > $@
 
-README.md : scheme.c utils/md.py
-	cat $< | utils/md.py > $@
+README.md : scheme.c utils/mkd.py
+	cat $< | utils/mkd.py > $@
 
 grind_leaks: scheme
 	valgrind --leak-check=full --show-leak-kinds=all ./scheme pro99.scm
