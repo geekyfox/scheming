@@ -11,8 +11,7 @@ gen: build/autogen.stamp
 
 build/autogen.stamp: scheme.c
 	@mkdir -p build
-	cat scheme.c | utils/sym.py > build/sym.c
-	mv build/sym.c scheme.c
+	utils/gensym.py scheme.c
 	cat scheme.c | utils/fmt.py > build/fmt.c
 	mv build/fmt.c scheme.c
 	touch build/autogen.stamp
