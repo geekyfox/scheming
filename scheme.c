@@ -964,15 +964,17 @@ struct object* object_scope_root()
 	return &DEFAULT_SCOPE;
 }
 
-void register_syntax_handlers();
-void teardown_syntax_handlers();
+void register_syntax_handler(const char* name, syntax_t handler);
+
+void setup_syntax();
+void teardown_syntax();
 void setup_stack();
 void teardown_stack();
 
 void setup_runtime()
 {
 	setup_stack();
-	register_syntax_handlers();
+	setup_syntax();
 	DEFAULT_SCOPE.o_typecode = TYPECODE_SCOPE;
 	scope_init(&DEFAULT_SCOPE.o_value.v_scope, NULL);
 	array_init(&ALL_OBJECTS);
@@ -992,7 +994,7 @@ void teardown_runtime()
 	collect_garbage();
 	array_dispose(&ALL_OBJECTS, false);
 	array_dispose(&OBJECT_POOL, true);
-	teardown_syntax_handlers();
+	teardown_syntax();
 }
 
 void gc_register(struct object* obj)
@@ -1191,7 +1193,7 @@ void stack_cdr(int offset)
 	SET(offset, pair_cdr(stack_get(offset)));
 }
 
-void syntax_quote()
+void syntax_quote(void) /* syntax: quote */
 {
 	stack_discard(1);
 	stack_car(0);
@@ -1199,7 +1201,7 @@ void syntax_quote()
 
 void unpack_pair(int offset, bool top_is_car);
 
-void syntax_if()
+void syntax_if(void) /* syntax: if */
 {
 	// stack is: ... (if-expr then-expr [else-expr]) scope
 	unpack_pair(1, true);
@@ -1222,7 +1224,7 @@ void syntax_if()
 	}
 }
 
-void syntax_and(void)
+void syntax_and(void) /* syntax: and */
 {
 	object_t scope = stack_get(0);
 	object_t exprs = stack_get(1);
@@ -1650,7 +1652,7 @@ void LAMBDA(void)
 	make(TYPECODE_LAMBDA, &lambda, 2);
 }
 
-void syntax_cond(void)
+void syntax_cond(void) /* syntax: cond */
 {
 	// [code] scope
 	stack_swap(0, 1);
@@ -1690,7 +1692,7 @@ void syntax_cond(void)
 	push_nil();
 }
 
-void syntax_define(void)
+void syntax_define(void) /* syntax: define */
 {
 	// code scope
 	object_t code = stack_get(1);
@@ -1738,7 +1740,7 @@ void syntax_define(void)
 	abort();
 }
 
-void syntax_letrec()
+void syntax_letrec(void) /* syntax: letrec */
 {
 	// (bindings code) super_scope
 	stack_duplicate(0);
@@ -1775,7 +1777,7 @@ void syntax_letrec()
 	eval_block();
 }
 
-void syntax_lambda()
+void syntax_lambda(void) /* syntax: lambda */
 {
 	object_t scope = stack_get(0);
 	object_t code = stack_get(1);
@@ -1791,21 +1793,12 @@ void syntax_lambda()
 
 static struct dict SYNTAX_HANDLERS;
 
-void register_syntax_handlers()
+void register_syntax_handler(const char* name, syntax_t syntax)
 {
-	struct dict* d = &SYNTAX_HANDLERS;
-
-	bzero(d, sizeof(struct dict));
-	dict_put(d, (char*)"and",    syntax_and);
-	dict_put(d, (char*)"cond",   syntax_cond);
-	dict_put(d, (char*)"define", syntax_define);
-	dict_put(d, (char*)"if",     syntax_if);
-	dict_put(d, (char*)"lambda", syntax_lambda);
-	dict_put(d, (char*)"letrec", syntax_letrec);
-	dict_put(d, (char*)"quote",  syntax_quote);
+	dict_put(&SYNTAX_HANDLERS, (char*)name, syntax);
 }
 
-void teardown_syntax_handlers()
+void teardown_syntax()
 {
 	dict_dispose(&SYNTAX_HANDLERS, DISPOSE_KEEP, DISPOSE_KEEP);
 }
@@ -1891,6 +1884,7 @@ void register_stdlib_functions()
 	register_native("write", native_write);
 }
 
+
 bool parse_and_push_bool(const char*);
 bool parse_and_push_int(const char*);
 
@@ -1929,3 +1923,14 @@ const char* object_typename(struct object* obj)
 	return typecode_to_name(obj->o_typecode);
 }
 
+void setup_syntax(void)
+{
+	bzero(&SYNTAX_HANDLERS, sizeof(struct dict));
+	register_syntax_handler("and", syntax_and);
+	register_syntax_handler("cond", syntax_cond);
+	register_syntax_handler("define", syntax_define);
+	register_syntax_handler("if", syntax_if);
+	register_syntax_handler("lambda", syntax_lambda);
+	register_syntax_handler("letrec", syntax_letrec);
+	register_syntax_handler("quote", syntax_quote);
+}

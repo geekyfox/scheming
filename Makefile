@@ -1,4 +1,10 @@
-all : fmt test README.md
+all : gen fmt test README.md
+
+.PHONY: gen
+gen:
+	@mkdir -p build
+	cat scheme.c | utils/gen.py > build/gen.c
+	mv build/gen.c scheme.c
 
 .PHONY: fmt
 fmt:
