@@ -26,10 +26,30 @@ int main(int argc, const char** argv)
 // declare (but not necessarily implement) a function above a place where
 // it's used is of course one of them.
 //
-// Moreover, this is the general pattern in this story: we postpone
-// writing lower-level implementation until we get a grasp on how it's
-// going to be used. Rather than building some bits and pieces here
-// and there and then trying to stitch them together.
+// Moreover, this is the general pattern in this story: I postpone
+// writing lower-level implementation until I get a handle on how it's
+// going to be used.
+//
+// This approach is called top-down, and it's not the only way to write
+// a program. A program can also be written bottom-up, which is to start
+// with individual nuts and bolts, and then to assemble them into a big
+// piece of code.
+//
+// There's an inherent problem with it though.
+//
+// Let's say, I start with writing standard library. I'm definitely going
+// to need it at some point anyway, so it isn't an obviously wrong place
+// to start. But then I'm running a risk of ending up with a neat and cute
+// implementation of the standard library which doesn't quite fit, say,
+// the design of the garbage collector. And then I have a dilemma. Either
+// I have to redo the standard library, which probably isn't 100% waste,
+// since I've hopefully learned a few things on the way, but it's still
+// double work. Or else I can refuse to accept sunk costs and stubbornly
+// work around idiosyncrasies of my "neat and cute" standard library in
+// my own garbage collector, and that's just dumb.
+//
+// But as long as something isn't done at all, I don't have to worry if
+// it's done right. There's a certain Zen feeling to it.
 //
 // Another thing is more subtle, but will get a lot of programmers,
 // especially more junior ones, nervous once they figure it out. It's
@@ -49,9 +69,9 @@ int main(int argc, const char** argv)
 // multithreaded embeddable Scheme interpreter, I'll just start from
 // scratch, and that's about it.
 //
-// Anyway, we'll write functions to setup and teardown runtime once we
+// Anyway, I'll write functions to setup and teardown runtime once I
 // get a better idea of how said runtime should look like, and for now
-// we focus on doing useful stuff.
+// I'll focus on doing the useful stuff.
 //
 
 #include <stdio.h>
@@ -79,7 +99,7 @@ void do_useful_stuff(int argc, const char** argv)
 // `cat foo.scm | ./scheme` do exactly the same, and otherwise fire
 // up a REPL.
 //
-// Now that we're going to have a function that reads code from a stream
+// Now that I'm going to have a function that reads code from a stream
 // and executes it, writing a function that does the same with a file is
 // trivial, so let's just make one.
 //
@@ -111,9 +131,9 @@ void execute_file(const char* filename)
 
 #include <stdbool.h>
 
-void stack_discard(int count);
 void eval_in_default_scope(bool force_eager);
 bool read_object(FILE*, bool die_on_eof);
+void stack_discard(int count);
 
 void execute(FILE* in)
 {
@@ -124,16 +144,24 @@ void execute(FILE* in)
 }
 
 //
-// Here we have a tiny function that raises big questions.
+// And here comes a tiny function that raises big questions.
 //
 // Question number one is "When you *simply* `read_object()` without
 // returning it, where the hell is that object that you've just read?"
 //
-// The answer is, we're going to maintain our own stack, and so the object
-// we've just read is there.
+// The answer is, I'm going to maintain my own stack, and so the object
+// I've just read is there.
 //
-// Second question then is why do we need to maintain your own stack and
-// the answer is because we'll need garbage collector anyway,
+// Second question then is why do I need to maintain my own stack and
+// the answer is because I'll need a garbage collector anyway, and then
+// I'll need a way to communicate to it which objects are disposable and
+// which are still useful, and doing it with objects on normal C stack
+// is goddamn painful. So I go with a JVM-ish design from the get go.
+//
+// Also, `stack_discard()` is because `eval` is expected to return it's
+// result, and I don't care about it, so I just throw it away.
+//
+// Now comes the REPL...
 //
 
 void print_object(FILE*);
@@ -150,11 +178,10 @@ void repl()
 	printf("bye\n");
 }
 
-///
-
-
-
-// ## Chapter #2 where we parse.
+//
+// ...which isn't particularly interesting, and we proceed to
+// ## Chapter #2 where we parse Lisp code.
+//
 
 int fgetc_skip(FILE*, bool die_on_eof);
 void read_atom(FILE* in);
