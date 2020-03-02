@@ -1,4 +1,4 @@
-// ## Chapter #1 where the story begins
+// ## Chapter 1 where the story begins
 //
 // Every story has to begin somewhere. This one is a tour through a
 // simplistic Scheme interpreter written in C, and every C program begins
@@ -126,7 +126,7 @@ void execute_file(const char* filename)
 }
 
 //
-// And now let's implement `execute()`
+// Now let's implement `execute()`
 //
 
 #include <stdbool.h>
@@ -180,7 +180,7 @@ void repl()
 
 //
 // ...which isn't particularly interesting, and we proceed to
-// ## Chapter #2 where we parse Lisp code.
+// ## Chapter 2 where we parse Lisp code.
 //
 
 int fgetc_skip(FILE*, bool die_on_eof);
