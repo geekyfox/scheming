@@ -143,7 +143,9 @@ FILE* fopen_or_die(const char* pathname, const char* mode)
 
 void execute_file(const char* filename)
 {
-	FILE* f = fopen_or_die(filename, "r");
+	FILE* f;
+
+	f = fopen_or_die(filename, "r");
 	execute(f);
 	fclose(f);
 }
@@ -262,3 +264,269 @@ void repl()
 ```
 
 ...which isn't particularly interesting, and we proceed to
+## Chapter 2 where we parse Lisp code
+
+What's neat about implementing a Lisp dialect is that you can be done
+with parsing in about three pints of Guinness, and then move on to
+funnier stuff.
+
+Of course "funnier" is relative here, and not just grammatically,
+but also in a Theory of Relativity kind of sense. I mean, Theory of
+Relativity describes extreme conditions where gravity is so high that
+common Newtonian laws don't work any more.
+
+Likewise, here we're venturing deep into dark swampy forests of
+Nerdyland where common understanding of "fun" doesn't apply. By
+the standards of normal folks whose idea of having fun implies
+things like mountain skiing and dance festivals, spending evenings
+tinkering with implementation of infinite recursion is hopelessly
+weird either way. So I mean absolutely no judgement towards those
+amazing guys and gals who enjoy messing with lexers, parsers, and
+all that shebang. Whatever floats your boat, really!
+
+This had to be said. Anyway, back to parsing.
+
+``` c
+
+int fgetc_skip(FILE*);
+
+object_t read_atom(FILE* in);
+object_t read_list(FILE* in);
+object_t read_quote(FILE* in);
+object_t read_string(FILE* in);
+
+object_t read_object(FILE* in)
+{
+	int ch = fgetc_skip(in);
+	switch (ch)
+	{
+	case EOF:
+		return NULL;
+	case '(':
+		return read_list(in);
+	case ')':
+		DIE("Unmatched ')'");
+	case '\'':
+		return read_quote(in);
+	case '"':
+		return read_string(in);
+	default:
+		ungetc(ch, in);
+		return read_atom(in);
+	}
+}
+
+```
+
+Lisp syntax is famously spartan. Basically all you get is:
+* lists (those thingies with ((astonishingly) copious) amount of
+parentheses),
+* strings (delimited by "double quotes" or however you call that character),
+* quotations (if you don't know who these are, you better look it up in
+Scheme spec, but basically it's a way to specify that ```'(+ 1 2)``` is
+*literally* a list with three elements and not an expression that adds
+two numbers),
+* and atoms, which are pretty much everything else including numbers
+and symbols.
+
+So what we're doing here is we're looking at the first non-trivial
+character in the input stream and if it's an opening parenthesis we
+interpret it a beginning of a list etc.
+
+``` c
+
+#include <ctype.h>
+
+int fgetc_or_die(FILE* in)
+{
+	int ch = fgetc(in);
+	if ((ch == EOF) && (! feof(in))) {
+		const char* err = strerror(errno);
+		DIE("IO error: %s", err);
+	}
+	return ch;
+}
+
+int fgetc_skip(FILE* in)
+{
+	bool comment = false, skip;
+	int ch;
+
+	do {
+		ch = fgetc_or_die(in);
+		if (ch == ';')
+			comment = true;
+		skip = comment || isspace(ch);
+		if (ch == '\n')
+			comment = false;
+	} while ((ch != EOF) && skip);
+
+	return ch;
+}
+
+```
+
+Oh, and "the first non-trivial character" means we fast-forward through
+the input stream ignoring comments and whitespace until we either
+encounter a character that's neither or reach an EOF.
+
+There are four `read_something()` functions that we promised to
+implement, let's start with `read_string()`.
+
+``` c
+
+object_t wrap_string(const char*);
+
+int fgetc_read_string(FILE* in)
+{
+	int ch = fgetc_or_die(in);
+
+	switch (ch) {
+	case EOF:
+		DIE("Premature end of input");
+	case '"':
+		return EOF;
+	case '\\':
+		ch = fgetc_or_die(in);
+		switch (ch) {
+		case EOF:
+			DIE("Premature end of input");
+		case 'n':
+			return '\n';
+		}
+	}
+
+	return ch;
+}
+
+object_t read_string(FILE* in)
+{
+	char buffer[10240];
+	int fill = 0, ch;
+
+	while ((ch = fgetc_read_string(in)) != EOF) {
+		buffer[fill++] = ch;
+		if (fill >= 10240)
+			DIE("Buffer overflow");
+	}
+
+	buffer[fill] = '\0';
+	return wrap_string(buffer);
+}
+
+```
+
+Nothing surprising here, just read characters into a buffer until you
+reach the closing double quote, then wrap the contents of the buffer
+into an `object_t` and call it a day.
+
+Yes, this simplistic implementation will miserably fail to parse a
+source file with a string constant that is longer than 10K characters.
+
+And you know, if you think about it, hard-coded 10K bytes for buffer
+size is kind of interesting here. It's an arbitrary number that on one
+hand is safely above any practical limit in terms of usefulness. I
+mean, of course you can hard-code entire "Crime and Punishment" as a
+single string constant just to humiliate a dimwit interpreter author,
+but within any remotely sane coding style such blob must be offloaded
+to an external text file.
+
+On the other hand it's safely below any practical limit in terms of
+conserving memory.
+
+``` c
+
+object_t parse_atom(const char*);
+
+bool isatomic(char ch)
+{
+	if (isspace(ch))
+		return false;
+	switch (ch) {
+	case '(':
+	case ')':
+	case ';':
+	case '"':
+		return false;
+	}
+	return true;
+}
+
+int fgetc_read_atom(FILE* in)
+{
+	int ch = fgetc_or_die(in);
+	if (ch == EOF)
+		return EOF;
+	if (isatomic(ch))
+		return ch;
+	ungetc(ch, in);
+	return EOF;
+}
+
+object_t read_atom(FILE* in)
+{
+	char buffer[10240];
+	int fill = 0, ch;
+
+	while ((ch = fgetc_read_atom(in)) != EOF) {
+		buffer[fill++] = ch;
+		if (fill >= 10240)
+			DIE("Buffer overflow");
+	}
+	buffer[fill] = '\0';
+	return parse_atom(buffer);
+}
+
+```
+
+This one isn
+
+I'm looking at another buffer and
+You know what boggles my mind even more?
+
+Remember, in the very beginning of
+``` c
+
+object_t wrap_bool(bool v);
+object_t wrap_int(int value);
+object_t wrap_symbol(const char*);
+
+object_t parse_bool(const char* text)
+{
+	if (strcmp(text, "#f") == 0)
+		return wrap_bool(false);
+	if (strcmp(text, "#t") == 0)
+		return wrap_bool(true);
+	return NULL;
+}
+
+object_t parse_int(const char* text)
+{
+	int index = 0, digits = 0, accum = 0, sign = 1;
+	if (text[0] == '-') {
+		index = 1;
+		sign = -1;
+	}
+	for ( ; text[index] ; index++) {
+		if (! isdigit(text[index]))
+			return NULL;
+		accum = accum * 10 + (text[index] - '0');
+		digits++;
+	}
+	if (digits == 0)
+		return NULL;
+	return wrap_int(sign * accum);
+}
+
+object_t parse_atom(const char* buffer)
+{
+	object_t result;
+	if ((result = parse_bool(buffer)))
+		return result;
+	if ((result = parse_int(buffer)))
+		return result;
+	return wrap_symbol(buffer);
+}
+
+```
+

@@ -252,7 +252,6 @@ void repl()
 
 //
 // ...which isn't particularly interesting, and we proceed to
-// CUTOFF
 // ## Chapter 2 where we parse Lisp code
 //
 // What's neat about implementing a Lisp dialect is that you can be done
@@ -262,16 +261,26 @@ void repl()
 // Of course "funnier" is relative here, and not just grammatically,
 // but also in a Theory of Relativity kind of sense. I mean, Theory of
 // Relativity describes extreme conditions where gravity is so high that
-// common Newtonian laws don't apply, and likewise here we're venturing so
-// deep into Nerdyland where common notion of fun doesn't work.
+// common Newtonian laws don't work any more.
+//
+// Likewise, here we're venturing deep into dark swampy forests of
+// Nerdyland where common understanding of "fun" doesn't apply. By
+// the standards of normal folks whose idea of having fun implies
+// things like mountain skiing and dance festivals, spending evenings
+// tinkering with implementation of infinite recursion is hopelessly
+// weird either way. So I mean absolutely no judgement towards those
+// amazing guys and gals who enjoy messing with lexers, parsers, and
+// all that shebang. Whatever floats your boat, really!
+//
+// This had to be said. Anyway, back to parsing.
 //
 
 int fgetc_skip(FILE*);
 
 object_t read_atom(FILE* in);
 object_t read_list(FILE* in);
-object_t read_string(FILE* in);
 object_t read_quote(FILE* in);
+object_t read_string(FILE* in);
 
 object_t read_object(FILE* in)
 {
@@ -295,6 +304,21 @@ object_t read_object(FILE* in)
 }
 
 //
+// Lisp syntax is famously spartan. Basically all you get is:
+// * lists (those thingies with ((astonishingly) copious) amount of
+// parentheses),
+// * strings (delimited by "double quotes" or however you call that character),
+// * quotations (if you don't know who these are, you better look it up in
+// Scheme spec, but basically it's a way to specify that ```'(+ 1 2)``` is
+// *literally* a list with three elements and not an expression that adds
+// two numbers),
+// * and atoms, which are pretty much everything else including numbers
+// and symbols.
+//
+// So what we're doing here is we're looking at the first non-trivial
+// character in the input stream and if it's an opening parenthesis we
+// interpret it a beginning of a list etc.
+//
 
 #include <ctype.h>
 
@@ -308,23 +332,139 @@ int fgetc_or_die(FILE* in)
 	return ch;
 }
 
-int fgetc_skip(FILE* f)
+int fgetc_skip(FILE* in)
 {
 	bool comment = false, skip;
 	int ch;
 
 	do {
-		ch = fgetc_or_die(f);
+		ch = fgetc_or_die(in);
 		if (ch == ';')
 			comment = true;
 		skip = comment || isspace(ch);
 		if (ch == '\n')
 			comment = false;
 	} while ((ch != EOF) && skip);
+
 	return ch;
 }
 
 //
+// Oh, and "the first non-trivial character" means we fast-forward through
+// the input stream ignoring comments and whitespace until we either
+// encounter a character that's neither or reach an EOF.
+//
+// There are four `read_something()` functions that we promised to
+// implement, let's start with `read_string()`.
+//
+
+object_t wrap_string(const char*);
+
+int fgetc_read_string(FILE* in)
+{
+	int ch = fgetc_or_die(in);
+
+	switch (ch) {
+	case EOF:
+		DIE("Premature end of input");
+	case '"':
+		return EOF;
+	case '\\':
+		ch = fgetc_or_die(in);
+		switch (ch) {
+		case EOF:
+			DIE("Premature end of input");
+		case 'n':
+			return '\n';
+		}
+	}
+
+	return ch;
+}
+
+object_t read_string(FILE* in)
+{
+	char buffer[10240];
+	int fill = 0, ch;
+
+	while ((ch = fgetc_read_string(in)) != EOF) {
+		buffer[fill++] = ch;
+		if (fill >= 10240)
+			DIE("Buffer overflow");
+	}
+
+	buffer[fill] = '\0';
+	return wrap_string(buffer);
+}
+
+//
+// Nothing surprising here, just read characters into a buffer until you
+// reach the closing double quote, then wrap the contents of the buffer
+// into an `object_t` and call it a day.
+//
+// Yes, this simplistic implementation will miserably fail to parse a
+// source file with a string constant that is longer than 10K characters.
+//
+// And you know, if you think about it, hard-coded 10K bytes for buffer
+// size is kind of interesting here. It's an arbitrary number that on one
+// hand is safely above any practical limit in terms of usefulness. I
+// mean, of course you can hard-code entire "Crime and Punishment" as a
+// single string constant just to humiliate a dimwit interpreter author,
+// but within any remotely sane coding style such blob must be offloaded
+// to an external text file.
+//
+// On the other hand it's safely below any practical limit in terms of
+// conserving memory.
+//
+
+object_t parse_atom(const char*);
+
+bool isatomic(char ch)
+{
+	if (isspace(ch))
+		return false;
+	switch (ch) {
+	case '(':
+	case ')':
+	case ';':
+	case '"':
+		return false;
+	}
+	return true;
+}
+
+int fgetc_read_atom(FILE* in)
+{
+	int ch = fgetc_or_die(in);
+	if (ch == EOF)
+		return EOF;
+	if (isatomic(ch))
+		return ch;
+	ungetc(ch, in);
+	return EOF;
+}
+
+object_t read_atom(FILE* in)
+{
+	char buffer[10240];
+	int fill = 0, ch;
+
+	while ((ch = fgetc_read_atom(in)) != EOF) {
+		buffer[fill++] = ch;
+		if (fill >= 10240)
+			DIE("Buffer overflow");
+	}
+	buffer[fill] = '\0';
+	return parse_atom(buffer);
+}
+
+//
+// This one isn
+//
+// I'm looking at another buffer and
+// You know what boggles my mind even more?
+//
+// Remember, in the very beginning of
 
 object_t wrap_bool(bool v);
 object_t wrap_int(int value);
@@ -357,116 +497,82 @@ object_t parse_int(const char* text)
 	return wrap_int(sign * accum);
 }
 
-bool isatomic(char ch)
+object_t parse_atom(const char* buffer)
 {
-	if (isspace(ch))
-		return false;
-	switch (ch) {
-	case '(': case ')': case ';': case '"':
-		return false;
-	}
-	return true;
-}
-
-object_t read_atom(FILE* in)
-{
-	char buffer[10240];
-	int fill = 0;
-
-	while (true) {
-		int ch = fgetc_or_die(in);
-		if (ch == EOF)
-			break;
-		if (! isatomic(ch)) {
-			ungetc(ch, in);
-			break;
-		}
-		if (fill >= 10240)
-			DIE("Buffer overflow");
-		buffer[fill++] = ch;
-	}
-	buffer[fill] = '\0';
-
-	object_t obj;
-	if ((obj = parse_bool(buffer)))
-		return obj;
-	if ((obj = parse_int(buffer)))
-		return obj;
+	object_t result;
+	if ((result = parse_bool(buffer)))
+		return result;
+	if ((result = parse_int(buffer)))
+		return result;
 	return wrap_symbol(buffer);
 }
 
 //
+// CUTOFF
 
-object_t wrap_nil(void);
-object_t cons(object_t, object_t);
-
+void push_list(object_t* ptr, object_t item);
 object_t reverse(object_t list);
+object_t wrap_nil(void);
 
-object_t cons_decref(object_t head, object_t tail)
+object_t read_next_object(FILE* in)
 {
-	object_t result = cons(head, tail);
-	decref(head);
-	decref(tail);
-	return result;
+	int ch = fgetc_skip(in);
+	if (ch == EOF)
+		DIE("Premature end of input");
+	if (ch == ')')
+		return NULL;
+	ungetc(ch, in);
+	return read_object(in);
 }
 
 object_t read_list(FILE* in)
 {
-	object_t accum = wrap_nil(), obj, tmp;
+	object_t accum, obj, result;
 
-	while (true) {
-		int ch = fgetc_skip(in);
-		if (ch == EOF)
-			DIE("Premature end of input");
-		if (ch == ')')
-			break;
+	accum = wrap_nil();
 
-		ungetc(ch, in);
-		if (! (obj = read_object(in)))
-			DIE("Premature end of input");
-
-		accum = cons_decref(obj, accum);
+	while ((obj = read_next_object(in))) {
+		push_list(&accum, obj);
+		decref(obj);
 	}
 
-	tmp = reverse(accum);
+	result = reverse(accum);
 	decref(accum);
-	return tmp;
+	return result;
 }
 
 //
 
-struct object* wrap_string(const char*);
+object_t cons(object_t, object_t);
 
-struct object* read_string(FILE* in)
+void push_list(object_t* ptr, object_t head)
 {
-	char buffer[10240];
-	int fill = 0;
+	object_t tail;
 
-	while (true) {
-		int ch = fgetc_or_die(in);
-		if (ch == EOF)
-			DIE("Premature end of input");
-		if (ch == '"')
-			break;
-		if (fill >= 10240)
-			DIE("Buffer overflow");
-		buffer[fill++] = ch;
-	}
-	buffer[fill] = '\0';
-	return wrap_string(buffer);
+	tail = *ptr;
+	*ptr = cons(head, tail);
+	decref(tail);
 }
 
 //
 
 object_t read_quote(FILE* in)
 {
-	object_t head, tail;
+	object_t head, result;
 
 	if (! (head = read_object(in)))
 		DIE("Premature end of input");
 
-	tail = cons_decref(head, wrap_nil());
-	return cons_decref(wrap_symbol("quote"), tail);
+	result = wrap_nil();
+
+	push_list(&result, head);
+	decref(head);
+
+	head = wrap_symbol("quote");
+	push_list(&result, head);
+	decref(head);
+
+	return result;
 }
 
 //
@@ -493,6 +599,28 @@ object_t eval_eager(scope_t scope, object_t expr)
 {
 	object_t result = eval_lazy(scope, expr);
 	return eval_force(result);
+}
+
+//
+
+struct thunk;
+typedef struct thunk* thunk_t;
+
+object_t eval_thunk(thunk_t thunk);
+thunk_t to_thunk(object_t obj);
+
+object_t eval_force(object_t result)
+{
+	thunk_t thunk;
+	object_t new_result;
+
+	while((thunk = to_thunk(result))) {
+		new_result = eval_thunk(thunk);
+		decref(result);
+		result = new_result;
+	}
+
+	return result;
 }
 
 //
@@ -540,13 +668,10 @@ object_t eval_sexpr(scope_t scope, pair_t code)
 
 	head = car(code);
 	tail = cdr(code);
-	head_sym = to_symbol(head);
 
-	if (head_sym) {
-		result = eval_syntax(scope, head_sym, tail);
-		if (result)
+	if ((head_sym = to_symbol(head)))
+		if ((result = eval_syntax(scope, head_sym, tail)))
 			return result;
-	}
 
 	func = eval_eager(scope, head);
 	result = eval_funcall(scope, func, tail);
@@ -558,7 +683,6 @@ object_t eval_sexpr(scope_t scope, pair_t code)
 //
 
 typedef object_t (*syntax_t)(scope_t scope, object_t code);
-
 syntax_t lookup_syntax_handler(symbol_t name);
 
 object_t eval_syntax(scope_t scope, symbol_t keyword, object_t body)
@@ -578,6 +702,7 @@ object_t eval_var(scope_t scope, symbol_t key)
 	return result;
 }
 
+// CUTOFF
 //
 
 struct array {
@@ -658,11 +783,11 @@ bool is_nil(object_t);
 
 const char* typename(object_t);
 
-object_t pop_or_die(object_t* ptr)
+object_t pop_list(object_t* ptr)
 {
 	object_t obj = *ptr;
 	if (is_nil(obj))
-		DIE("Premature end of list");
+		return NULL;
 
 	pair_t pair = to_pair(obj);
 	if (! pair)
@@ -676,14 +801,11 @@ object_t pop_or_die(object_t* ptr)
 
 object_t reverse(object_t list)
 {
-	object_t result = wrap_nil(), obj, tmp;
+	object_t result = wrap_nil(), obj;
 
-	while (! is_nil(list)) {
-		obj = pop_or_die(&list);
-		tmp = cons(obj, result);
-		decref(result);
-		result = tmp;
-	}
+	while ((obj = pop_list(&list)))
+		push_list(&result, obj);
+
 	return result;
 }
 
@@ -693,10 +815,10 @@ void array_init(array_t);
 
 void eval_args(array_t args, scope_t scope, object_t exprs)
 {
-	while (! is_nil(exprs)) {
-		object_t expr = pop_or_die(&exprs);
+	object_t expr;
+
+	while ((expr = pop_list(&exprs)))
 		array_push(args, eval_eager(scope, expr));
-	}
 }
 
 //
@@ -707,12 +829,64 @@ void eval_args(array_t args, scope_t scope, object_t exprs)
 // embed pro99.scm : problem #1
 //
 
+void assert_arg_count(const char* name, int actual, int expected)
+{
+	if (actual != expected)
+		DIE("Expected %d arguments for %s, got %d", expected, name, actual);
+}
+
+object_t native_nullp(int argct, object_t* args) // null?
+{
+	assert_arg_count("null?", argct, 1);
+	return wrap_bool(is_nil(args[0]));
+}
+
+//
+
+pair_t to_pair_or_die(const char* name, object_t obj)
+{
+	pair_t pair = to_pair(obj);
+	if (! pair)
+		DIE("Expected argument of %s to be a pair, got %s instead", name, typename(obj));
+	return pair;
+}
+
+object_t native_car(int argct, object_t* args)
+{
+	assert_arg_count("car", argct, 1);
+	pair_t pair = to_pair_or_die("car", args[0]);
+	object_t result = car(pair);
+	incref(result);
+	return result;
+}
+
+object_t native_cdr(int argct, object_t* args)
+{
+	assert_arg_count("cdr", argct, 1);
+	pair_t pair = to_pair_or_die("cdr", args[0]);
+	object_t result = cdr(pair);
+	incref(result);
+	return result;
+}
+
+//
+
+object_t pop_list_or_die(object_t* ptr)
+{
+	object_t result = pop_list(ptr);
+	if (! result)
+		DIE("Premature end of list");
+	return result;
+}
+
+//
+
 void eval_define(scope_t scope, symbol_t key, object_t expr);
 object_t lambda(scope_t scope, object_t params, object_t body);
 
 object_t syntax_define(scope_t scope, object_t code)
 {
-	object_t head = pop_or_die(&code);
+	object_t head = pop_list_or_die(&code);
 
 	pair_t head_pair = to_pair(head);
 	if (head_pair) {
@@ -730,7 +904,7 @@ object_t syntax_define(scope_t scope, object_t code)
 
 	symbol_t head_sym = to_symbol(head);
 	if (head_sym) {
-		object_t expr = pop_or_die(&code);
+		object_t expr = pop_list_or_die(&code);
 		eval_define(scope, head_sym, expr);
 		return wrap_nil();
 	}
@@ -744,17 +918,17 @@ bool eval_boolean(scope_t scope, object_t expr);
 
 object_t syntax_if(scope_t scope, object_t code)
 {
-	object_t if_expr = pop_or_die(&code);
-	object_t then_expr = pop_or_die(&code);
+	object_t if_expr = pop_list_or_die(&code);
+	object_t then_expr = pop_list_or_die(&code);
 
 	if (eval_boolean(scope, if_expr))
 		return eval_lazy(scope, then_expr);
 
-	if (is_nil(code))
-		return wrap_nil();
+	object_t else_expr = pop_list(&code);
+	if (else_expr)
+		return eval_lazy(scope, else_expr);
 
-	object_t else_expr = pop_or_die(&code);
-	return eval_lazy(scope, else_expr);
+	return wrap_nil();
 }
 
 //
@@ -992,19 +1166,31 @@ bool is_garbage(object_t);
 bool hasrefs(object_t);
 void mark_garbage(object_t);
 
-void object_reach(void*);
+void reach_object(void*);
 
 void object_dispose(object_t);
 
+struct array REACHABLE_OBJECTS;
+
+void reset_gc_state(object_t obj);
+
+void* pop_array(array_t arr)
+{
+   return arr->data[--arr->size];
+}
+
 void collect_garbage()
 {
-	for (int i=ALL_OBJECTS.size-1; i>=0; i--)
-		mark_garbage((object_t)ALL_OBJECTS.data[i]);
+	array_init(&REACHABLE_OBJECTS);
 	for (int i=ALL_OBJECTS.size-1; i>=0; i--) {
 		object_t obj = ALL_OBJECTS.data[i];
-		if (hasrefs(obj))
-			object_reach(obj);
+		reset_gc_state(obj);
 	}
+	while (REACHABLE_OBJECTS.size) {
+		object_t obj = pop_array(&REACHABLE_OBJECTS);
+		reach_object(obj);
+	}
+	free(REACHABLE_OBJECTS.data);
 	int count = ALL_OBJECTS.size;
 	int index = 0;
 	while (index < count) {
@@ -1021,11 +1207,13 @@ void collect_garbage()
 
 //
 
+void mark_reachable(void*);
+
 void dict_reach(struct dict* dict)
 {
 	for (int i=dict->size-1; i>=0; i--)
 		if (dict->data[i].key)
-			object_reach(dict->data[i].value);
+			mark_reachable(dict->data[i].value);
 }
 
 //
@@ -1041,9 +1229,15 @@ typedef struct type* type_t;
 
 //
 
+enum gc_state {
+	GARBAGE,
+	REACHABLE,
+	REACHED
+};
+
 struct object {
 	type_t type;
-	bool garbage;
+	enum gc_state gc_state;
 	int stackrefs;
 };
 
@@ -1070,26 +1264,26 @@ bool hasrefs(object_t obj)
 
 void mark_garbage(object_t obj)
 {
-	obj->garbage = true;
+	obj->gc_state = GARBAGE;
 }
 
 bool is_garbage(object_t obj)
 {
-	return obj->garbage;
+	return obj->gc_state == GARBAGE;
 }
 
 //
 
-void object_reach(void* ptr)
+void reach_object(void* ptr)
 {
 	if (! ptr)
 		return;
 
 	object_t obj = ptr;
-	if (! obj->garbage)
+	if (obj->gc_state == REACHED)
 		return;
 
-	obj->garbage = false;
+	obj->gc_state = REACHED;
 	if (obj->type->reach)
 		obj->type->reach(obj);
 }
@@ -1255,8 +1449,8 @@ void pair_print(FILE* out, void* ptr)
 void pair_reach(void* obj)
 {
 	pair_t pair = obj;
-	object_reach(pair->car);
-	object_reach(pair->cdr);
+	mark_reachable(pair->car);
+	mark_reachable(pair->cdr);
 }
 
 struct type TYPE_PAIR = {
@@ -1270,8 +1464,7 @@ object_t cons(object_t head, object_t tail)
 	pair_t result = malloc(sizeof(struct pair));
 	result->car = head;
 	result->cdr = tail;
-	object_init(&result->self, &TYPE_PAIR);
-	return &result->self;
+	return object_init(result, &TYPE_PAIR);
 }
 
 pair_t to_pair(object_t obj)
@@ -1305,8 +1498,7 @@ struct object* wrap_int(int v)
 {
 	integer_t num = malloc(sizeof(struct integer));
 	num->value = v;
-	object_init(&num->self, &TYPE_INT);
-	return &num->self;
+	return object_init(num, &TYPE_INT);
 }
 
 //
@@ -1341,11 +1533,8 @@ struct object* wrap_string(const char* v)
 {
 	string_t str = malloc(sizeof(struct string));
 	str->value = strdup(v);
-	object_init(&str->self, &TYPE_STRING);
-	return &str->self;
+	return object_init(str, &TYPE_STRING);
 }
-
-//
 
 //
 
@@ -1417,11 +1606,11 @@ typedef struct lambda* lambda_t;
 void lambda_reach(void* obj)
 {
 	lambda_t lambda = obj;
-	object_reach(lambda->l_body);
-	object_reach(lambda->l_scope);
-	object_reach(lambda->l_name);
+	mark_reachable(lambda->l_body);
+	mark_reachable(lambda->l_scope);
+	mark_reachable(lambda->l_name);
 	for (int i=lambda->l_params.size-1; i>=0; i--)
-		object_reach(lambda->l_params.data[i]);
+		mark_reachable(lambda->l_params.data[i]);
 }
 
 void lambda_dispose(void* obj)
@@ -1446,24 +1635,20 @@ lambda_t to_lambda(object_t obj)
 
 object_t lambda(scope_t scope, object_t params, object_t body)
 {
+	object_t param;
+
 	lambda_t lambda = malloc(sizeof(struct lambda));
 	lambda->l_name = NULL;
 	lambda->l_body = body;
 	lambda->l_scope = scope;
 	array_init(&lambda->l_params);
 
-	while (! is_nil(params)) {
-		pair_t pair = to_pair(params);
-		assert(pair);
-		assert(to_symbol(car(pair)));
-		array_push(&lambda->l_params, car(pair));
-		params = cdr(pair);
+	while ((param = pop_list(&params))) {
+		assert(to_symbol(param));
+		array_push(&lambda->l_params, param);
 	}
 
-	object_t obj = &lambda->self;
-	object_init(obj, &TYPE_LAMBDA);
-
-	return obj;
+	return object_init(lambda, &TYPE_LAMBDA);
 }
 
 //
@@ -1475,8 +1660,6 @@ struct thunk {
 	object_t* args;
 };
 
-typedef struct thunk* thunk_t;
-
 void thunk_dispose(void* obj)
 {
 	thunk_t thunk = obj;
@@ -1487,9 +1670,9 @@ void thunk_dispose(void* obj)
 void thunk_reach(void* obj)
 {
 	thunk_t thunk = obj;
-	object_reach(thunk->lambda);
+	mark_reachable(thunk->lambda);
 	for (int i=thunk->argct-1; i>=0; i--)
-		object_reach(thunk->args[i]);
+		mark_reachable(thunk->args[i]);
 }
 
 struct type THUNK = {
@@ -1552,21 +1735,6 @@ object_t eval_thunk(thunk_t thunk)
 
 //
 
-object_t eval_force(object_t result)
-{
-	while (true) {
-		thunk_t thunk = to_thunk(result);
-		if (! thunk)
-			break;
-		object_t old_result = result;
-		result = eval_thunk(thunk);
-		decref(old_result);
-	}
-	return result;
-}
-
-//
-
 void gc_register(struct object* obj)
 {
 	static int threshold = 256;
@@ -1611,7 +1779,7 @@ void scope_reach(void* obj)
 	scope_t scope = obj;
 	struct dict* binds = &scope->s_binds;
 	dict_reach(binds);
-	object_reach(&scope->s_parent->self);
+	mark_reachable(scope->s_parent);
 }
 
 void scope_dispose(void* obj)
@@ -1688,14 +1856,6 @@ object_t invoke_native(native_t native, int argct, object_t* args)
 
 //
 
-void assert_arg_count(const char* name, int actual, int expected)
-{
-	if (actual != expected)
-		DIE("Expected %d arguments for %s, got %d", expected, name, actual);
-}
-
-//
-
 void scope_init(scope_t scope, scope_t parent)
 {
 	dict_init(&scope->s_binds);
@@ -1725,11 +1885,10 @@ scope_t to_scope(object_t obj)
 
 object_t eval_block(scope_t scope, object_t code)
 {
-	object_t result = wrap_nil();
+	object_t result = wrap_nil(), expr;
 
-	while (! is_nil(code)) {
+	while ((expr = pop_list(&code))) {
 		result = eval_force(result);
-		object_t expr = pop_or_die(&code);
 		decref(result);
 		result = eval_lazy(scope, expr);
 	}
@@ -1798,17 +1957,9 @@ void teardown_runtime()
 
 object_t syntax_quote(scope_t scope, object_t code)
 {
-	object_t result = pop_or_die(&code);
+	object_t result = pop_list_or_die(&code);
 	incref(result);
 	return result;
-}
-
-//
-
-object_t native_nullp(int argct, object_t* args) // null?
-{
-	assert_arg_count("null?", argct, 1);
-	return wrap_bool(is_nil(args[0]));
 }
 
 //
@@ -1818,33 +1969,11 @@ void register_native(const char* name, object_t (*func)(int, object_t*))
 	native_t native = malloc(sizeof(struct native));
 	native->invoke = func;
 
-	object_t obj = &native->self;
-	object_init(obj, &TYPE_NATIVE);
+	object_t obj = object_init(native, &TYPE_NATIVE);
 	object_t key = wrap_symbol(name);
 	scope_bind(&DEFAULT_SCOPE, (symbol_t)key, obj);
 	decref(obj);
 	decref(key);
-}
-
-//
-
-pair_t to_pair_or_die(const char* name, object_t obj)
-{
-	pair_t pair = to_pair(obj);
-	if (! pair)
-		DIE("Expected argument of %s to be a pair, got %s instead", name, typename(obj));
-	return pair;
-}
-
-//
-
-object_t native_cdr(int argct, object_t* args)
-{
-	assert_arg_count("cdr", argct, 1);
-	pair_t pair = to_pair_or_die("cdr", args[0]);
-	object_t result = cdr(pair);
-	incref(result);
-	return result;
 }
 
 //
@@ -1873,21 +2002,13 @@ bool eq(struct object* x, struct object* y);
 
 object_t syntax_and(scope_t scope, object_t code)
 {
-	while (! is_nil(code)) {
-		object_t expr = pop_or_die(&code);
+	object_t expr;
+
+	while ((expr = pop_list(&code)))
 		if (! eval_boolean(scope, expr))
 			return wrap_bool(false);
-	}
-	return wrap_bool(true);
-}
 
-object_t native_car(int argct, object_t* args)
-{
-	assert_arg_count("car", argct, 1);
-	pair_t pair = to_pair_or_die("car", args[0]);
-	object_t result = car(pair);
-	incref(result);
-	return result;
+	return wrap_bool(true);
 }
 
 object_t native_cons(int argct, object_t* args)
@@ -1905,11 +2026,10 @@ object_t native_eqp(int argct, object_t* args) // eq?
 object_t native_list(int argct, object_t* args)
 {
 	object_t result = wrap_nil();
-	for (int i=argct-1; i>=0; i--) {
-		object_t tmp = cons(args[i], result);
-		decref(result);
-		result = tmp;
-	}
+
+	for (int i=argct-1; i>=0; i--)
+		push_list(&result, args[i]);
+
 	return result;
 }
 
@@ -1924,8 +2044,9 @@ object_t native_fold(int argct, object_t* args)
 	object_t result = seed;
 	incref(result);
 
-	while (! is_nil(seq)) {
-		object_t item = pop_or_die(&seq);
+	object_t item;
+
+	while ((item = pop_list(&seq))) {
 		object_t args[] = {result, item};
 		incref(item);
 		result = invoke(func, 2, args);
@@ -2061,9 +2182,10 @@ bool object_is_symbol(object_t obj, const char* text)
 
 object_t syntax_cond(scope_t scope, object_t code)
 {
-	while (! is_nil(code)) {
-		object_t clause = pop_or_die(&code);
-		object_t test = pop_or_die(&clause);
+	object_t clause, test;
+
+	while ((clause = pop_list(&code))) {
+		test = pop_list_or_die(&clause);
 		if (object_is_symbol(test, "else") || eval_boolean(scope, test))
 			return eval_block(scope, clause);
 	}
@@ -2075,14 +2197,15 @@ object_t syntax_letrec(scope_t outer_scope, object_t code)
 	object_t scope_obj = derive_scope(outer_scope);
 	scope_t scope = to_scope(scope_obj);
 
-	object_t bindings = pop_or_die(&code);
-	while (! is_nil(bindings)) {
-		object_t binding = pop_or_die(&bindings);
-		object_t key = pop_or_die(&binding);
+	object_t bindings = pop_list_or_die(&code);
+	object_t binding;
+
+	while ((binding = pop_list(&bindings))) {
+		object_t key = pop_list_or_die(&binding);
 		symbol_t keysym = to_symbol(key);
 		if (! keysym)
 			DIE("Expected letrec binding name to be a symbol, got %s instead", typename(key));
-		object_t expr = pop_or_die(&binding);
+		object_t expr = pop_list_or_die(&binding);
 		eval_define(scope, keysym, expr);
 	}
 
@@ -2108,6 +2231,28 @@ bool unbox_int(int* ptr, object_t obj)
 	return true;
 }
 
+void reset_gc_state(object_t obj)
+{
+	if (obj->stackrefs == 0) {
+		obj->gc_state = GARBAGE;
+	} else {
+		obj->gc_state = REACHABLE;
+		array_push(&REACHABLE_OBJECTS, obj);
+	}
+}
+
+void mark_reachable(void* ptr)
+{
+	if (! ptr)
+		return;
+
+	object_t obj = ptr;
+	if (obj->gc_state == GARBAGE) {
+		obj->gc_state = REACHABLE;
+		array_push(&REACHABLE_OBJECTS, obj);
+	}
+}
+
 void setup_syntax(void)
 {
 	register_syntax_handler("and", syntax_and);
@@ -2118,6 +2263,7 @@ void setup_syntax(void)
 	register_syntax_handler("letrec", syntax_letrec);
 	register_syntax_handler("quote", syntax_quote);
 }
+
 void register_stdlib_functions(void)
 {
 	register_native("*", native_num_mult);
