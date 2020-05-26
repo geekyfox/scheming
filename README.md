@@ -316,7 +316,7 @@ object_t read_object(FILE* in)
 
 ```
 
-Lisp syntax is famously spartan. Basically all you get is:
+Lisp syntax is famously Spartan. Basically all you get is:
 * lists (those thingies with ((astonishingly) copious) amount of
 parentheses),
 * strings (delimited by "double quotes" or however you call that character),
@@ -421,16 +421,24 @@ into an `object_t` and call it a day.
 Yes, this simplistic implementation will miserably fail to parse a
 source file with a string constant that is longer than 10K characters.
 
-And you know, if you think about it, hard-coded 10K bytes for buffer
-size is kind of interesting here. It's an arbitrary number that on one
-hand is safely above any practical limit in terms of usefulness. I
-mean, of course you can hard-code entire "Crime and Punishment" as a
-single string constant just to humiliate a dimwit interpreter author,
-but within any remotely sane coding style such blob must be offloaded
-to an external text file.
+If you think about it, hard-coded 10K bytes for buffer size is kind of
+interesting here. It's an arbitrary number that on one hand is safely
+above any practical limit in terms of usefulness. I mean, of course
+you can hard-code entire "Crime and Punishment" as a single string
+constant just to humiliate a dimwit interpreter author. But within
+any remotely sane coding style such blob must be offloaded to an
+external text file, and even an order of magnitude less should be good
+enough for all reasonable intents and purposes.
 
-On the other hand it's safely below any practical limit in terms of
-conserving memory.
+On the other hand it's also safely below any practical limit in terms
+of conserving memory. It can easily be an order of magnitude bigger
+without causing any issues whatsoever.
+
+At least on a modern general-purpose machine with a couple of gigs
+of memory. If you've got a PDP-7 like one that Ken Thompson used for
+his early development of Unix then a hundred kilobytes might be your
+**entire** RAM and then you have to be more thoughtful with your
+throwaway buffers.
 
 ``` c
 
@@ -477,7 +485,7 @@ object_t read_atom(FILE* in)
 
 ```
 
-This one isn
+This one is pretty much
 
 I'm looking at another buffer and
 You know what boggles my mind even more?
@@ -528,3 +536,121 @@ object_t parse_atom(const char* buffer)
 
 ```
 
+``` c
+
+void push_list(object_t* ptr, object_t item);
+object_t reverse(object_t list);
+object_t wrap_nil(void);
+
+object_t read_next_object(FILE* in)
+{
+	int ch = fgetc_skip(in);
+	if (ch == EOF)
+		DIE("Premature end of input");
+	if (ch == ')')
+		return NULL;
+	ungetc(ch, in);
+	return read_object(in);
+}
+
+object_t read_list(FILE* in)
+{
+	object_t accum = wrap_nil(), obj;
+
+	while ((obj = read_next_object(in))) {
+		push_list(&accum, obj);
+		decref(obj);
+	}
+
+	object_t result = reverse(accum);
+	decref(accum);
+	return result;
+}
+
+```
+
+``` c
+
+object_t cons(object_t, object_t);
+
+void push_list(object_t* ptr, object_t head)
+{
+	object_t tail = *ptr;
+	*ptr = cons(head, tail);
+	decref(tail);
+}
+
+```
+
+And while we're at it, let's also implement `reverse()`
+
+``` c
+
+object_t pop_list(object_t*);
+
+object_t reverse(object_t list)
+{
+	object_t result = wrap_nil(), obj;
+
+	while ((obj = pop_list(&list)))
+		push_list(&result, obj);
+
+	return result;
+}
+
+```
+
+which simply pops things from one list and pushes them to another.
+
+``` c
+
+struct pair;
+typedef struct pair* pair_t;
+
+object_t car(pair_t);
+object_t cdr(pair_t);
+bool is_nil(object_t);
+const char* typename(object_t);
+pair_t to_pair(object_t);
+
+object_t pop_list(object_t* ptr)
+{
+	object_t obj = *ptr;
+	if (is_nil(obj))
+		return NULL;
+
+	pair_t pair = to_pair(obj);
+	if (! pair)
+		DIE("Expected a pair when traversing a list, got %s instead", typename(obj));
+
+	*ptr = cdr(pair);
+	return car(pair);
+}
+
+```
+
+
+
+``` c
+
+object_t read_quote(FILE* in)
+{
+	object_t obj = read_object(in);
+	if (! obj)
+		DIE("Premature end of input");
+
+	object_t result = wrap_nil();
+	push_list(&result, obj);
+	decref(obj);
+
+	object_t keyword = wrap_symbol("quote");
+	push_list(&result, keyword);
+	decref(keyword);
+
+	return result;
+}
+
+```
+
+and now we're finally done with parsing and can move on to
+## Chapter 3 where we evaluate

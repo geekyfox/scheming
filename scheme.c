@@ -304,7 +304,7 @@ object_t read_object(FILE* in)
 }
 
 //
-// Lisp syntax is famously spartan. Basically all you get is:
+// Lisp syntax is famously Spartan. Basically all you get is:
 // * lists (those thingies with ((astonishingly) copious) amount of
 // parentheses),
 // * strings (delimited by "double quotes" or however you call that character),
@@ -405,16 +405,24 @@ object_t read_string(FILE* in)
 // Yes, this simplistic implementation will miserably fail to parse a
 // source file with a string constant that is longer than 10K characters.
 //
-// And you know, if you think about it, hard-coded 10K bytes for buffer
-// size is kind of interesting here. It's an arbitrary number that on one
-// hand is safely above any practical limit in terms of usefulness. I
-// mean, of course you can hard-code entire "Crime and Punishment" as a
-// single string constant just to humiliate a dimwit interpreter author,
-// but within any remotely sane coding style such blob must be offloaded
-// to an external text file.
+// If you think about it, hard-coded 10K bytes for buffer size is kind of
+// interesting here. It's an arbitrary number that on one hand is safely
+// above any practical limit in terms of usefulness. I mean, of course
+// you can hard-code entire "Crime and Punishment" as a single string
+// constant just to humiliate a dimwit interpreter author. But within
+// any remotely sane coding style such blob must be offloaded to an
+// external text file, and even an order of magnitude less should be good
+// enough for all reasonable intents and purposes.
 //
-// On the other hand it's safely below any practical limit in terms of
-// conserving memory.
+// On the other hand it's also safely below any practical limit in terms
+// of conserving memory. It can easily be an order of magnitude bigger
+// without causing any issues whatsoever.
+//
+// At least on a modern general-purpose machine with a couple of gigs
+// of memory. If you've got a PDP-7 like one that Ken Thompson used for
+// his early development of Unix then a hundred kilobytes might be your
+// **entire** RAM and then you have to be more thoughtful with your
+// throwaway buffers.
 //
 
 object_t parse_atom(const char*);
@@ -459,7 +467,7 @@ object_t read_atom(FILE* in)
 }
 
 //
-// This one isn
+// This one is pretty much
 //
 // I'm looking at another buffer and
 // You know what boggles my mind even more?
@@ -508,7 +516,6 @@ object_t parse_atom(const char* buffer)
 }
 
 //
-// CUTOFF
 
 void push_list(object_t* ptr, object_t item);
 object_t reverse(object_t list);
@@ -527,16 +534,14 @@ object_t read_next_object(FILE* in)
 
 object_t read_list(FILE* in)
 {
-	object_t accum, obj, result;
-
-	accum = wrap_nil();
+	object_t accum = wrap_nil(), obj;
 
 	while ((obj = read_next_object(in))) {
 		push_list(&accum, obj);
 		decref(obj);
 	}
 
-	result = reverse(accum);
+	object_t result = reverse(accum);
 	decref(accum);
 	return result;
 }
@@ -547,37 +552,79 @@ object_t cons(object_t, object_t);
 
 void push_list(object_t* ptr, object_t head)
 {
-	object_t tail;
-
-	tail = *ptr;
+	object_t tail = *ptr;
 	*ptr = cons(head, tail);
 	decref(tail);
 }
 
 //
+// And while we're at it, let's also implement `reverse()`
+//
 
-object_t read_quote(FILE* in)
+object_t pop_list(object_t*);
+
+object_t reverse(object_t list)
 {
-	object_t head, result;
+	object_t result = wrap_nil(), obj;
 
-	if (! (head = read_object(in)))
-		DIE("Premature end of input");
-
-	result = wrap_nil();
-
-	push_list(&result, head);
-	decref(head);
-
-	head = wrap_symbol("quote");
-	push_list(&result, head);
-	decref(head);
+	while ((obj = pop_list(&list)))
+		push_list(&result, obj);
 
 	return result;
 }
 
 //
-// Chapter 3 where we evaluate
+// which simply pops things from one list and pushes them to another.
 //
+
+struct pair;
+typedef struct pair* pair_t;
+
+object_t car(pair_t);
+object_t cdr(pair_t);
+bool is_nil(object_t);
+const char* typename(object_t);
+pair_t to_pair(object_t);
+
+object_t pop_list(object_t* ptr)
+{
+	object_t obj = *ptr;
+	if (is_nil(obj))
+		return NULL;
+
+	pair_t pair = to_pair(obj);
+	if (! pair)
+		DIE("Expected a pair when traversing a list, got %s instead", typename(obj));
+
+	*ptr = cdr(pair);
+	return car(pair);
+}
+
+//
+//
+//
+
+object_t read_quote(FILE* in)
+{
+	object_t obj = read_object(in);
+	if (! obj)
+		DIE("Premature end of input");
+
+	object_t result = wrap_nil();
+	push_list(&result, obj);
+	decref(obj);
+
+	object_t keyword = wrap_symbol("quote");
+	push_list(&result, keyword);
+	decref(keyword);
+
+	return result;
+}
+
+//
+// and now we're finally done with parsing and can move on to
+// ## Chapter 3 where we evaluate
+// CUTOFF
 
 struct scope;
 typedef struct scope* scope_t;
@@ -612,10 +659,9 @@ thunk_t to_thunk(object_t obj);
 object_t eval_force(object_t result)
 {
 	thunk_t thunk;
-	object_t new_result;
 
 	while((thunk = to_thunk(result))) {
-		new_result = eval_thunk(thunk);
+		object_t new_result = eval_thunk(thunk);
 		decref(result);
 		result = new_result;
 	}
@@ -625,17 +671,13 @@ object_t eval_force(object_t result)
 
 //
 
-struct pair;
-typedef struct pair* pair_t;
-
 struct symbol;
 typedef struct symbol* symbol_t;
 
-pair_t to_pair(object_t);
 symbol_t to_symbol(object_t);
 
 object_t eval_sexpr(scope_t, pair_t);
-object_t eval_var(scope_t, symbol_t);
+object_t eval_var(scope_t scope, symbol_t key);
 
 void incref(object_t);
 
@@ -655,28 +697,38 @@ object_t eval_lazy(scope_t scope, object_t expr)
 
 //
 
-object_t car(pair_t);
-object_t cdr(pair_t);
+object_t lookup_in_scope(scope_t scope, symbol_t key);
+const char* unwrap_symbol(symbol_t);
+
+object_t eval_var(scope_t scope, symbol_t key)
+{
+	object_t result = lookup_in_scope(scope, key);
+	if (! result)
+		DIE("Undefined variable %s", unwrap_symbol(key));
+	incref(result);
+	return result;
+}
+
+//
 
 object_t eval_syntax(scope_t scope, symbol_t keyword, object_t body);
 object_t eval_funcall(scope_t scope, object_t func, object_t exprs);
 
 object_t eval_sexpr(scope_t scope, pair_t code)
 {
-	object_t head, tail, result, func;
-	symbol_t head_sym;
+	object_t head = car(code), tail = cdr(code);
+	symbol_t head_sym = to_symbol(head);
 
-	head = car(code);
-	tail = cdr(code);
-
-	if ((head_sym = to_symbol(head)))
-		if ((result = eval_syntax(scope, head_sym, tail)))
+	if (head_sym) {
+		object_t result = eval_syntax(scope, head_sym, tail);
+		if (result)
 			return result;
+	}
 
-	func = eval_eager(scope, head);
-	result = eval_funcall(scope, func, tail);
-
+	object_t func = eval_eager(scope, head);
+	object_t result = eval_funcall(scope, func, tail);
 	decref(func);
+
 	return result;
 }
 
@@ -691,18 +743,6 @@ object_t eval_syntax(scope_t scope, symbol_t keyword, object_t body)
 	return (handler == NULL) ? NULL : handler(scope, body);
 }
 
-//
-
-object_t scope_get(scope_t, symbol_t key);
-
-object_t eval_var(scope_t scope, symbol_t key)
-{
-	object_t result = scope_get(scope, key);
-	incref(result);
-	return result;
-}
-
-// CUTOFF
 //
 
 struct array {
@@ -779,38 +819,6 @@ object_t eval_funcall(scope_t scope, object_t func, object_t exprs)
 
 //
 
-bool is_nil(object_t);
-
-const char* typename(object_t);
-
-object_t pop_list(object_t* ptr)
-{
-	object_t obj = *ptr;
-	if (is_nil(obj))
-		return NULL;
-
-	pair_t pair = to_pair(obj);
-	if (! pair)
-		DIE("Expected a pair when traversing a list, got %s instead", typename(obj));
-
-	*ptr = cdr(pair);
-	return car(pair);
-}
-
-//
-
-object_t reverse(object_t list)
-{
-	object_t result = wrap_nil(), obj;
-
-	while ((obj = pop_list(&list)))
-		push_list(&result, obj);
-
-	return result;
-}
-
-//
-
 void array_init(array_t);
 
 void eval_args(array_t args, scope_t scope, object_t exprs)
@@ -821,9 +829,6 @@ void eval_args(array_t args, scope_t scope, object_t exprs)
 		array_push(args, eval_eager(scope, expr));
 }
 
-//
-
-//
 // ## Chapter six
 //
 // embed pro99.scm : problem #1
@@ -964,7 +969,6 @@ void teardown_syntax();
 void register_syntax_handler(const char* name, syntax_t handler);
 
 void* dict_lookup(struct dict*, const char*);
-const char* unwrap_symbol(symbol_t);
 
 syntax_t lookup_syntax_handler(symbol_t name)
 {
@@ -1755,23 +1759,15 @@ struct scope {
 
 typedef struct scope* scope_t;
 
-object_t scope_lookup(scope_t scope, const char* key)
+object_t lookup_in_scope(scope_t scope, symbol_t key)
 {
 	while (scope) {
-		void* value = dict_lookup(&scope->s_binds, key);
+		void* value = dict_lookup(&scope->s_binds, key->value);
 		if (value)
 			return value;
 		scope = scope->s_parent;
 	}
 	return NULL;
-}
-
-object_t scope_get(scope_t scope, symbol_t key)
-{
-	object_t result = scope_lookup(scope, key->value);
-	if (result == NULL)
-		DIE("Undefined variable %s", key->value);
-	return result;
 }
 
 void scope_reach(void* obj)
@@ -1993,8 +1989,6 @@ object_t native_newline(int argct, object_t* args)
 	fputs("\n", stdout);
 	return wrap_nil();
 }
-
-// CUTOFF
 
 bool unbox_int(int*, object_t);
 
