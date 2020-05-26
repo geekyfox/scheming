@@ -424,6 +424,15 @@ object_t read_string(FILE* in)
 // **entire** RAM and then you have to be more thoughtful with your
 // throwaway buffers.
 //
+// By the way, it's really impressive how those people in 1960s could
+// develop an entire real operating system on a computer like that. Well,
+// not exactly mind-blowing, like, I myself started coding on a
+// Soviet-made ZX Spectrum clone with 48 kilobytes of RAM, and you
+// can't write a super-dooper-sophisticated OS on such machine because
+// **it just won't fit**, but still, it's so cool.
+//
+// Okay, back to business. Let's `parse_atom()`.
+//
 
 object_t parse_atom(const char*);
 
