@@ -143,9 +143,7 @@ FILE* fopen_or_die(const char* pathname, const char* mode)
 
 void execute_file(const char* filename)
 {
-	FILE* f;
-
-	f = fopen_or_die(filename, "r");
+	FILE* f = fopen_or_die(filename, "r");
 	execute(f);
 	fclose(f);
 }
