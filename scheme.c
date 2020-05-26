@@ -426,7 +426,7 @@ object_t read_string(FILE* in)
 //
 // By the way, it's really impressive how those people in 1960s could
 // develop an entire real operating system on a computer like that. Well,
-// not exactly mind-blowing, like, I myself started coding on a
+// not exactly mind-boggling, like, I myself started coding on a
 // Soviet-made ZX Spectrum clone with 48 kilobytes of RAM, and you
 // can't write a super-dooper-sophisticated OS on such machine because
 // **it just won't fit**, but still, it's so cool.
@@ -476,12 +476,17 @@ object_t read_atom(FILE* in)
 }
 
 //
-// This one is pretty much
+// Pretty much the same approach as in `read_string()`: collect
+// characters for as long as it looks like an atom, then convert it to
+// an `object_t` and that's pretty much it.
 //
-// I'm looking at another buffer and
-// You know what boggles my mind even more?
+// And now I'm looking at another buffer and do you know what
+// actually boggles my mind?
 //
-// Remember, in the very beginning of
+// Remember, in the very beginning of this story I mentioned that a C
+// program is normally supposed to have its `main()` function at the
+// end?
+//
 
 object_t wrap_bool(bool v);
 object_t wrap_int(int value);
@@ -524,6 +529,13 @@ object_t parse_atom(const char* buffer)
 	return wrap_symbol(buffer);
 }
 
+//
+// Pretty straightforward really. If it looks a boolean, convert to a
+// boolean. If it looks like an integer number, convert to an integer.
+// If it looks like a symbol, convert to a symbol. If it looks like a
+// floating-point number... Convert to a symbol because screw you!
+//
+//
 //
 
 void push_list(object_t* ptr, object_t item);
