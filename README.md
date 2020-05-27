@@ -421,12 +421,12 @@ into an `object_t` and call it a day.
 Yes, this simplistic implementation will miserably fail to parse a
 source file with a string constant that is longer than 10K characters.
 
-If you think about it, hard-coded 10K bytes for buffer size is kind of
-interesting here. It's an arbitrary number that on one hand is safely
-above any practical limit in terms of usefulness. I mean, of course
-you can hard-code entire "Crime and Punishment" as a single string
-constant just to humiliate a dimwit interpreter author. But within
-any remotely sane coding style such blob must be offloaded to an
+If you take some time to think about it, hard-coded 10K bytes for buffer
+size is kind of interesting here. It's an arbitrary number that on one
+hand is safely above any practical limit in terms of usefulness. I mean,
+of course you can hard-code entire "Crime and Punishment" as a single
+string constant just to humiliate a dimwit interpreter author. But
+within any remotely sane coding style such blob must be offloaded to an
 external text file, and even an order of magnitude less should be good
 enough for all reasonable intents and purposes.
 
@@ -498,12 +498,20 @@ Pretty much the same approach as in `read_string()`: collect
 characters for as long as it looks like an atom, then convert it to
 an `object_t` and that's pretty much it.
 
-And now I'm looking at another buffer and do you know what
-actually boggles my mind?
+And now I'm looking at another buffer and do you know what actually
+boggles my mind?
 
 Remember, in the very beginning of this story I mentioned that a C
 program is normally supposed to have its `main()` function at the
-end?
+end? So, what boggles my mind is why are we still doing it?
+
+Well, I don't mean we all do. In some programming languages it is more
+common, in some it is less, but really, why would you do it in any
+language? It's such a weird way to layout your code where you have to
+scroll all the way down to the bottom of the source file and then
+work your way up in a Benjamin Button kind of way.
+
+Okay, enough of ranting, let's `parse_atom()`.
 
 ``` c
 
@@ -674,4 +682,3 @@ object_t read_quote(FILE* in)
 ```
 
 and now we're finally done with parsing and can move on to
-## Chapter 3 where we evaluate

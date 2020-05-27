@@ -25,6 +25,12 @@ cut: temp/cut
 temp/cut : temp/cut.c
 	$(CC) $(CFLAGS) $< -o $@
 
+.PHONY: gaps 
+gaps: temp/gaps.txt
+
+temp/gaps.txt : temp/cut.c
+	make cut 2>&1 | grep undefined | awk '{print $$NF}' | sort -u | tee $@
+
 temp/cut.c : scheme.c
 	@mkdir -p temp
 	cat $< | scripts/cut.rb | scripts/codegen.rb > $@
