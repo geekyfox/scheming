@@ -493,6 +493,11 @@ object_t read_atom(FILE* in)
 // scroll all the way down to the bottom of the source file and then
 // work your way up in a Benjamin Button kind of way.
 //
+// I mean, I know it's the legacy of Pascal where you were required to
+// have the equivalent of `main()` at the bottom (and finish it with an
+// `end.` with a period instead of a semicolon). I also understand that
+// back in those days it made sense 
+//
 // Okay, enough of ranting, let's `parse_atom()`.
 //
 
