@@ -511,11 +511,17 @@ language? It's such a weird way to layout your code where you have to
 scroll all the way down to the bottom of the source file and then
 work your way up in a Benjamin Button kind of way.
 
+I mean, I know it's the legacy of Pascal where you were required to
+have the equivalent of `main()` at the bottom (and finish it with an
+`end.` with a period instead of a semicolon). I also understand that
+back in those days it made sense
+
 Okay, enough of ranting, let's `parse_atom()`.
 
 ``` c
 
 object_t wrap_bool(bool v);
+object_t wrap_char(char ch);
 object_t wrap_int(int value);
 object_t wrap_symbol(const char*);
 
@@ -525,6 +531,17 @@ object_t parse_bool(const char* text)
 		return wrap_bool(false);
 	if (strcmp(text, "#t") == 0)
 		return wrap_bool(true);
+	return NULL;
+}
+
+object_t parse_char(const char* text)
+{
+	if (strcmp(text, "#\\newline") == 0)
+		return wrap_char('\n');
+	if (strcmp(text, "#\\space") == 0)
+		return wrap_char(' ');
+	if ((strlen(text) == 3) && (text[0] == '#') && (text[1] == '\\'))
+		return wrap_char(text[2]);
 	return NULL;
 }
 
@@ -552,6 +569,8 @@ object_t parse_atom(const char* buffer)
 	if ((result = parse_bool(buffer)))
 		return result;
 	if ((result = parse_int(buffer)))
+		return result;
+	if ((result = parse_char(buffer)))
 		return result;
 	return wrap_symbol(buffer);
 }

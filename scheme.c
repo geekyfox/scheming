@@ -496,12 +496,13 @@ object_t read_atom(FILE* in)
 // I mean, I know it's the legacy of Pascal where you were required to
 // have the equivalent of `main()` at the bottom (and finish it with an
 // `end.` with a period instead of a semicolon). I also understand that
-// back in those days it made sense 
+// back in those days it made sense
 //
 // Okay, enough of ranting, let's `parse_atom()`.
 //
 
 object_t wrap_bool(bool v);
+object_t wrap_char(char ch);
 object_t wrap_int(int value);
 object_t wrap_symbol(const char*);
 
@@ -511,6 +512,17 @@ object_t parse_bool(const char* text)
 		return wrap_bool(false);
 	if (strcmp(text, "#t") == 0)
 		return wrap_bool(true);
+	return NULL;
+}
+
+object_t parse_char(const char* text)
+{
+	if (strcmp(text, "#\\newline") == 0)
+		return wrap_char('\n');
+	if (strcmp(text, "#\\space") == 0)
+		return wrap_char(' ');
+	if ((strlen(text) == 3) && (text[0] == '#') && (text[1] == '\\'))
+		return wrap_char(text[2]);
 	return NULL;
 }
 
@@ -538,6 +550,8 @@ object_t parse_atom(const char* buffer)
 	if ((result = parse_bool(buffer)))
 		return result;
 	if ((result = parse_int(buffer)))
+		return result;
+	if ((result = parse_char(buffer)))
 		return result;
 	return wrap_symbol(buffer);
 }
@@ -922,7 +936,7 @@ object_t pop_list_or_die(object_t* ptr)
 
 //
 
-void eval_define(scope_t scope, symbol_t key, object_t expr);
+void eval_define(scope_t eval_scope, scope_t bind_scope, symbol_t key, object_t expr);
 object_t lambda(scope_t scope, object_t params, object_t body);
 
 object_t syntax_define(scope_t scope, object_t code)
@@ -938,7 +952,7 @@ object_t syntax_define(scope_t scope, object_t code)
 
 		object_t args = cdr(head_pair);
 		object_t func = lambda(scope, args, code);
-		eval_define(scope, name, func);
+		eval_define(scope, scope, name, func);
 		decref(func);
 		return wrap_nil();
 	}
@@ -946,7 +960,7 @@ object_t syntax_define(scope_t scope, object_t code)
 	symbol_t head_sym = to_symbol(head);
 	if (head_sym) {
 		object_t expr = pop_list_or_die(&code);
-		eval_define(scope, head_sym, expr);
+		eval_define(scope, scope, head_sym, expr);
 		return wrap_nil();
 	}
 
@@ -1849,15 +1863,15 @@ void scope_bind(scope_t scope, symbol_t key, object_t value)
 
 //
 
-void eval_define(scope_t scope, symbol_t key, object_t expr)
+void eval_define(scope_t eval_scope, scope_t bind_scope, symbol_t key, object_t expr)
 {
-	object_t result = eval_eager(scope, expr);
+	object_t result = eval_eager(eval_scope, expr);
 
 	lambda_t lambda = to_lambda(result);
 	if (lambda)
 		lambda->l_name = key;
 
-	scope_bind(scope, key, result);
+	scope_bind(bind_scope, key, result);
 	decref(result);
 }
 
@@ -2178,6 +2192,12 @@ int unbox_int_or_die(const char* name, object_t arg)
 	DIE("Expected argument for %s to be an integer, got %s instead", name, typename(arg));
 }
 
+struct character;
+typedef struct character* char_t;
+
+char_t to_char(object_t);
+char unwrap_char(char_t);
+
 bool eq(struct object* x, struct object* y)
 {
 	while (true) {
@@ -2197,6 +2217,10 @@ bool eq(struct object* x, struct object* y)
 		symbol_t sx = to_symbol(x), sy = to_symbol(y);
 		if (sx && sy)
 			return strcmp(unwrap_symbol(sx), unwrap_symbol(sy)) == 0;
+
+		char_t cx = to_char(x), cy = to_char(y);
+		if (cx && cy)
+			return unwrap_char(cx) == unwrap_char(cy);
 
 		DIE("Don't know how to eq? %s against %s", typename(x), typename(y));
 	}
@@ -2236,7 +2260,7 @@ object_t syntax_letrec(scope_t outer_scope, object_t code)
 		if (! keysym)
 			DIE("Expected letrec binding name to be a symbol, got %s instead", typename(key));
 		object_t expr = pop_list_or_die(&binding);
-		eval_define(scope, keysym, expr);
+		eval_define(scope, scope, keysym, expr);
 	}
 
 	object_t result = eval_block(scope, code);
@@ -2283,6 +2307,226 @@ void mark_reachable(void* ptr)
 	}
 }
 
+object_t syntax_letseq(scope_t scope, object_t code) // let*
+{
+	object_t scope_obj = NULL;
+
+	object_t bindings = pop_list_or_die(&code);
+
+	object_t binding;
+
+	while ((binding = pop_list(&bindings))) {
+		object_t key = pop_list_or_die(&binding);
+		symbol_t keysym = to_symbol(key);
+		if (! keysym)
+			DIE("Expected letrec binding name to be a symbol, got %s instead", typename(key));
+		object_t expr = pop_list_or_die(&binding);
+		object_t new_scope_obj = derive_scope(scope);
+		if (scope_obj)
+			decref(scope_obj);
+		scope_t new_scope = to_scope(new_scope_obj);
+
+		eval_define(scope, new_scope, keysym, expr);
+
+		scope_obj = new_scope_obj;
+		scope = new_scope;
+	}
+
+	object_t result = eval_block(scope, code);
+
+	decref(scope_obj);
+	return result;
+}
+
+string_t to_string(object_t obj)
+{
+	if (obj->type == &TYPE_STRING)
+		return (string_t)obj;
+	return NULL;
+}
+
+string_t to_string_or_die(const char* name, object_t obj)
+{
+	string_t str = to_string(obj);
+	if (! str)
+		DIE("Expected argument of %s to be a str, got %s instead", name, typename(obj));
+	return str;
+}
+
+const char* unwrap_string(string_t str)
+{
+	return str->value;
+}
+
+struct file {
+	struct object self;
+	FILE* value;
+};
+
+typedef struct file* file_t;
+
+void dispose_file(void* obj)
+{
+	file_t file = obj;
+	fclose(file->value);
+	free(obj);
+}
+
+struct type TYPE_FILE = {
+	.name = "file",
+	.dispose = dispose_file,
+};
+
+struct object* wrap_file(FILE* v)
+{
+	file_t file = malloc(sizeof(struct file));
+	file->value = v;
+	return object_init(file, &TYPE_FILE);
+}
+
+object_t native_open_input_file(int argct, object_t* args) // open-input-file
+{
+	assert_arg_count("open-input-file", argct, 1);
+	string_t name = to_string_or_die("open-input-file", args[0]);
+	FILE* f = fopen_or_die(unwrap_string(name), "r");
+	return wrap_file(f);
+}
+
+file_t to_file(object_t obj)
+{
+	if (obj->type == &TYPE_FILE)
+		return (file_t)obj;
+	return NULL;
+}
+
+file_t to_file_or_die(const char* name, object_t obj)
+{
+	file_t file = to_file(obj);
+	if (! file)
+		DIE("Expected argument of %s to be a port, got %s instead", name, typename(obj));
+	return file;
+}
+
+FILE* unwrap_file(file_t file)
+{
+	return file->value;
+}
+
+struct character {
+	struct object self;
+	char value;
+};
+
+void print_char(FILE* out, void* obj)
+{
+	char_t ch = obj;
+	fputc(ch->value, out);
+}
+
+struct type TYPE_CHAR = {
+	.name = "character",
+	.print = print_char
+};
+
+struct object* wrap_char(char v)
+{
+	char_t ch = malloc(sizeof(struct character));
+	ch->value = v;
+	return object_init(ch, &TYPE_CHAR);
+}
+
+object_t native_read_char(int argct, object_t* args) // read-char
+{
+	assert_arg_count("read-char", argct, 1);
+	file_t file = to_file_or_die("read-char", args[0]);
+	FILE* f = unwrap_file(file);
+	int ch = fgetc_or_die(f);
+	if (ch == EOF)
+		return wrap_nil();
+	else
+		return wrap_char(ch);
+}
+
+object_t syntax_or(scope_t scope, object_t code)
+{
+	object_t expr;
+
+	while ((expr = pop_list(&code)))
+		if (eval_boolean(scope, expr))
+			return wrap_bool(true);
+	return wrap_bool(false);
+}
+
+char_t to_char(object_t obj)
+{
+	if (obj->type == &TYPE_CHAR)
+		return (char_t)obj;
+	return NULL;
+}
+
+char_t to_char_or_die(const char* name, object_t obj)
+{
+	char_t ch = to_char(obj);
+	if (! ch)
+		DIE("Expected argument of %s to be a character, got %s instead", name, typename(obj));
+	return ch;
+}
+
+char unwrap_char(char_t ch)
+{
+	return ch->value;
+}
+
+object_t native_list_to_string(int argct, object_t* args) // list->string
+{
+	assert_arg_count("list->string", argct, 1);
+	object_t list = args[0], obj;
+	char buffer[10240];
+	int fill = 0;
+
+	while ((obj = pop_list(&list))) {
+		if (fill >= 10240)
+			DIE("Buffer overflow");
+		char_t ch = to_char_or_die("list->string", obj);
+		buffer[fill++] = unwrap_char(ch);
+	}
+	buffer[fill++] = '\0';
+
+	return wrap_string(buffer);
+}
+
+object_t native_string_equal(int argct, object_t* args) // string=?
+{
+	assert_arg_count("string=?", argct, 2);
+	string_t a = to_string(args[0]);
+	string_t b = to_string(args[1]);
+
+	if (a && b) {
+		const char* sa = unwrap_string(a);
+		const char* sb = unwrap_string(b);
+		return wrap_bool(strcmp(sa, sb) == 0);
+	}
+
+	return wrap_bool(false);
+}
+
+object_t native_string_length(int argct, object_t* args) // string-length
+{
+	assert_arg_count("string-length", argct, 1);
+	string_t obj = to_string_or_die("string-length", args[0]);
+	const char* str = unwrap_string(obj);
+	return wrap_int(strlen(str));
+}
+
+object_t native_string_ref(int argct, object_t* args) // string-ref
+{
+	assert_arg_count("string-ref", argct, 2);
+	string_t obj = to_string_or_die("string-ref", args[0]);
+	int index = unbox_int_or_die("string-ref", args[1]);
+	char ch = unwrap_string(obj)[index];
+	return wrap_char(ch);
+}
+
 void setup_syntax(void)
 {
 	register_syntax_handler("and", syntax_and);
@@ -2290,7 +2534,9 @@ void setup_syntax(void)
 	register_syntax_handler("define", syntax_define);
 	register_syntax_handler("if", syntax_if);
 	register_syntax_handler("lambda", syntax_lambda);
+	register_syntax_handler("let*", syntax_letseq);
 	register_syntax_handler("letrec", syntax_letrec);
+	register_syntax_handler("or", syntax_or);
 	register_syntax_handler("quote", syntax_quote);
 }
 
@@ -2308,12 +2554,18 @@ void register_stdlib_functions(void)
 	register_native("eq?", native_eqp);
 	register_native("fold", native_fold);
 	register_native("list", native_list);
+	register_native("list->string", native_list_to_string);
 	register_native("modulo", native_modulo);
 	register_native("newline", native_newline);
 	register_native("null?", native_nullp);
+	register_native("open-input-file", native_open_input_file);
 	register_native("pair?", native_pairp);
+	register_native("read-char", native_read_char);
 	register_native("reverse", native_reverse);
 	register_native("set-cdr!", native_setcdr);
+	register_native("string-length", native_string_length);
+	register_native("string-ref", native_string_ref);
+	register_native("string=?", native_string_equal);
 	register_native("symbol?", native_symbolp);
 	register_native("write", native_write);
 }

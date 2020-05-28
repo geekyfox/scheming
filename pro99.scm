@@ -176,21 +176,28 @@
 (define primes '(2 3 5 7))
 
 (define (next-prime x)
-	(if (prime? x) x (next-prime (+ x 1))))
+	(if 
+		(prime? x)
+		x
+		(next-prime (+ x 1))))
 
 (define (prime? x)
-	(define (impl pms)
-		(cond
-			((< x (* (car pms) (car pms)))
-				#t)
-			((= 0 (modulo x (car pms)))
-				#f)
-			(else
-				(impl (cdr (extend-primes! pms))))))
-	(impl primes))
+	(letrec (
+			(impl
+				(lambda (pms)
+					(cond
+						((< x (* (car pms) (car pms)))
+							#t)
+						((= 0 (modulo x (car pms)))
+							#f)
+						(else
+							(impl (cdr (extend-primes! pms))))))))
+		(impl primes)))
 
 (define (extend-primes! pms)
-	(if (null? (cdr pms)) (set-cdr! pms (list (next-prime (+ 1 (car pms))))))
+	(if
+		(null? (cdr pms))
+		(set-cdr! pms (list (next-prime (+ 1 (car pms))))))
 	pms)
 
 (writeln (prime? 7))
@@ -242,5 +249,3 @@
 (writeln (prime-factors 315))
 (writeln (prime-factors 331155))
 (writeln (prime-factors 3311555))
-
-

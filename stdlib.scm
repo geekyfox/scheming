@@ -35,3 +35,7 @@
 (define (writeln x)
 	(write x)
 	(newline))
+
+(define eof-object? null?)
+
+(define (> a b) (< b a))
