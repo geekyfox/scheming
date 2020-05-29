@@ -803,15 +803,33 @@ typedef struct array* array_t;
 
 #include <strings.h>
 
+struct array ARRAY_POOL[256];
+int ARRAY_POOL_CT = 0;
+
 void array_init(array_t arr)
 {
-	bzero(arr, sizeof(struct array));
+	if (ARRAY_POOL_CT > 0)
+		*arr = ARRAY_POOL[--ARRAY_POOL_CT];
+	else
+		bzero(arr, sizeof(struct array));
 }
 
 void array_dispose(struct array* arr)
 {
-	free(arr->data);
+	if (ARRAY_POOL_CT == 256) {
+		free(arr->data);			
+	} else {
+		arr->size = 0;
+		ARRAY_POOL[ARRAY_POOL_CT++] = *arr;
+	}
+
 	bzero(arr, sizeof(struct array));
+}
+
+void dispose_array_pool()
+{
+	while (ARRAY_POOL_CT)
+		free(ARRAY_POOL[--ARRAY_POOL_CT].data);
 }
 
 void array_push(array_t arr, void* entry)
@@ -1061,7 +1079,7 @@ void dict_init(struct dict* dict)
 int strhash(const char*);
 int compare_entry(struct dict_entry* entry, int hash, const char* key);
 
-int hash_to_index(int hash, int size)
+inline int hash_to_index(int hash, int size)
 {
 	int index = hash % size;
 	if (index < 0)
@@ -1936,6 +1954,7 @@ void teardown_runtime()
 	teardown_syntax();
 	collect_garbage();
 	array_dispose(&ALL_OBJECTS);
+	dispose_array_pool();
 }
 
 //
