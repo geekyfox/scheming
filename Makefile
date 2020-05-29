@@ -44,7 +44,7 @@ grind: scheme
 grind_leaks: scheme
 	valgrind --leak-check=full --show-leak-kinds=all ./scheme pro99.scm
 
-profile:
+profile.txt: scheme
 	rm -f callgrind.out.*
 	valgrind --tool=callgrind ./scheme pro99.scm
 	callgrind_annotate --tree=both > profile.txt

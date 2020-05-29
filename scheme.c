@@ -803,7 +803,7 @@ typedef struct array* array_t;
 
 #include <strings.h>
 
-struct array ARRAY_POOL[256];
+struct array ARRAY_POOL[1024];
 int ARRAY_POOL_CT = 0;
 
 void array_init(array_t arr)
@@ -816,7 +816,7 @@ void array_init(array_t arr)
 
 void array_dispose(struct array* arr)
 {
-	if (ARRAY_POOL_CT == 256) {
+	if (ARRAY_POOL_CT == 1024) {
 		free(arr->data);			
 	} else {
 		arr->size = 0;
@@ -1184,6 +1184,8 @@ void reset_gc_state(object_t obj);
 
 void* pop_array(array_t arr)
 {
+	if (arr->size == 0)
+		return NULL;
    return arr->data[--arr->size];
 }
 
@@ -1228,6 +1230,7 @@ void dict_reach(struct dict* dict)
 
 struct type {
 	const char* name;
+	size_t size;
 	void (*reach)(void*);
 	void (*dispose)(void*);
 	void (*print)(FILE*, void*);
@@ -1298,13 +1301,24 @@ void reach_object(void* ptr)
 
 //
 
-void object_dispose(object_t obj)
+array_t get_object_pool(type_t);
+
+void reclaim(object_t obj)
 {
-	if (obj->type->dispose) {
-		obj->type->dispose(obj);
+	if (obj->type->size) {
+		array_t mempool = get_object_pool(obj->type);
+		array_push(mempool, obj);
 	} else {
 		free(obj);
 	}
+}
+
+void object_dispose(object_t obj)
+{
+	if (obj->type->dispose)
+		obj->type->dispose(obj);
+	else
+		reclaim(obj);
 }
 
 //
@@ -1463,16 +1477,66 @@ void pair_reach(void* obj)
 
 struct type TYPE_PAIR = {
 	.name = "pair",
+	.size = sizeof(struct pair),
 	.print = pair_print,
 	.reach = pair_reach,
 };
 
+struct array POOL_24;
+struct array POOL_32;
+struct array POOL_40;
+
+array_t get_object_pool(type_t type)
+{
+	switch(type->size) {
+	case 24:
+		return &POOL_24;
+	case 32:
+		return &POOL_32;
+	case 40:
+		return &POOL_40;
+	default:
+		DIE("No memory pool for type %s (%lu bytes)", type->name, type->size);
+	}
+}
+
+void dispose_object_pools()
+{
+	object_t obj;
+
+	while ((obj = pop_array(&POOL_24)))
+		free(obj);
+	array_dispose(&POOL_24);
+	while ((obj = pop_array(&POOL_32)))
+		free(obj);
+	array_dispose(&POOL_32);
+	while ((obj = pop_array(&POOL_40)))
+		free(obj);
+	array_dispose(&POOL_40);
+}
+
+void* allocate_object(type_t type)
+{
+	array_t pool = get_object_pool(type);
+	object_t obj = pop_array(pool);
+	if (! obj)
+		obj = malloc(type->size);
+	obj->type = type;
+	return obj;
+}
+
+object_t register_object(void* ptr)
+{
+	object_t obj = ptr;
+	return object_init(ptr, obj->type);
+}
+
 object_t cons(object_t head, object_t tail)
 {
-	pair_t result = malloc(sizeof(struct pair));
+	pair_t result = allocate_object(&TYPE_PAIR);
 	result->car = head;
 	result->cdr = tail;
-	return object_init(result, &TYPE_PAIR);
+	return register_object(result);
 }
 
 pair_t to_pair(object_t obj)
@@ -1499,12 +1563,13 @@ void print_int(FILE* out, void* obj)
 
 struct type TYPE_INT = {
 	.name = "int",
+	.size = sizeof(struct integer),
 	.print = print_int
 };
 
 struct object* wrap_int(int v)
 {
-	integer_t num = malloc(sizeof(struct integer));
+	integer_t num = allocate_object(&TYPE_INT);
 	num->value = v;
 	return object_init(num, &TYPE_INT);
 }
@@ -1674,7 +1739,7 @@ void thunk_dispose(void* obj)
 {
 	thunk_t thunk = obj;
 	array_dispose(&thunk->args);
-	free(obj);
+	reclaim(obj);
 }
 
 void thunk_reach(void* obj)
@@ -1687,13 +1752,14 @@ void thunk_reach(void* obj)
 
 struct type THUNK = {
 	.name = "thunk",
+	.size = sizeof(struct thunk),
 	.reach = thunk_reach,
 	.dispose = thunk_dispose,
 };
 
 object_t make_thunk(lambda_t lambda, array_t args)
 {
-	thunk_t thunk = malloc(sizeof(struct thunk));
+	thunk_t thunk = allocate_object(&THUNK);
 	thunk->lambda = lambda;
 	thunk->args = *args;
 	object_t result = object_init(thunk, &THUNK);
@@ -1788,11 +1854,12 @@ void scope_dispose(void* obj)
 	scope_t scope = obj;
 	dict_dispose(&scope->s_binds);
 	if (scope->s_parent)
-		free(obj);
+		reclaim(obj);
 }
 
 struct type SCOPE = {
 	.name = "scope",
+	.size = sizeof(struct scope),
 	.reach = scope_reach,
 	.dispose = scope_dispose,
 };
@@ -1868,7 +1935,7 @@ void scope_init(scope_t scope, scope_t parent)
 
 object_t derive_scope(scope_t parent)
 {
-	scope_t scope = malloc(sizeof(struct scope));
+	scope_t scope = allocate_object(&SCOPE);
 	scope_init(scope, parent);
 	return (object_t)scope;
 }
@@ -1952,6 +2019,7 @@ void teardown_runtime()
 	teardown_syntax();
 	collect_garbage();
 	array_dispose(&ALL_OBJECTS);
+	dispose_object_pools();
 	dispose_array_pool();
 }
 
@@ -2381,12 +2449,13 @@ void print_char(FILE* out, void* obj)
 
 struct type TYPE_CHAR = {
 	.name = "character",
+	.size = sizeof(struct character),
 	.print = print_char
 };
 
 struct object* wrap_char(char v)
 {
-	char_t ch = malloc(sizeof(struct character));
+	char_t ch = allocate_object(&TYPE_CHAR);
 	ch->value = v;
 	return object_init(ch, &TYPE_CHAR);
 }
