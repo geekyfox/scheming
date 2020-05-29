@@ -1007,8 +1007,7 @@ bool eval_boolean(scope_t scope, object_t expr)
 //
 
 struct dict_entry {
-	const char* key;
-	int hash;
+	symbol_t key;
 	void* value;
 };
 
@@ -1026,17 +1025,9 @@ void teardown_syntax();
 
 void register_syntax_handler(const char* name, syntax_t handler);
 
-void* dict_lookup(struct dict*, const char*);
-void* dict_lookup_fast(struct dict*, const char*, int hash);
+void* dict_lookup(struct dict*, const char*, int hash);
 
 int strhash(const char*);
-
-syntax_t lookup_syntax_handler(symbol_t name)
-{
-	const char* key = unwrap_symbol(name);
-	int hash = strhash(key);
-	return dict_lookup_fast(&SYNTAX_HANDLERS, key, hash);
-}
 
 //
 
@@ -1044,6 +1035,9 @@ void dict_dispose(struct dict*);
 
 void teardown_syntax()
 {
+	// for (int i=SYNTAX_HANDLERS.size-1; i>=0; i--)
+	// 	if (SYNTAX_HANDLERS.data[i].key)
+	// 		decref((object_t)SYNTAX_HANDLERS.data[i].key);
 	dict_dispose(&SYNTAX_HANDLERS);
 }
 
@@ -1051,9 +1045,6 @@ void teardown_syntax()
 
 void dict_dispose(struct dict* dict)
 {
-	for (int i=dict->size-1; i>=0; i--)
-		if (dict->data[i].key)
-			free((char*)dict->data[i].key);
 	free(dict->data);
 	bzero(dict, sizeof(struct dict));
 }
@@ -1068,14 +1059,7 @@ void dict_init(struct dict* dict)
 //
 
 int strhash(const char*);
-int compare_entry(struct dict_entry* entry, int hash, const char* key)
-{
-	if (entry->hash == hash) {
-		return strcmp(entry->key, key);
-	} else {
-		return entry->hash - hash;
-	}
-}
+int compare_entry(struct dict_entry* entry, int hash, const char* key);
 
 int hash_to_index(int hash, int size)
 {
@@ -1108,18 +1092,15 @@ void* dict_lookup_fast(struct dict* dict, const char* key, int hash)
 	}
 }
 
-void* dict_lookup(struct dict* dict, const char* key)
-{
-	return dict_lookup_fast(dict, key, strhash(key));
-}
-
 //
 
-void* dict_put(struct dict*, const char*, void*);
+void* dict_put(struct dict*, symbol_t, void*);
 
 void register_syntax_handler(const char* name, syntax_t syntax)
 {
-	dict_put(&SYNTAX_HANDLERS, name, syntax);
+	symbol_t sym = to_symbol(wrap_symbol(name));
+	dict_put(&SYNTAX_HANDLERS, sym, syntax);
+	decref((object_t)sym);
 }
 
 //
@@ -1127,44 +1108,6 @@ void register_syntax_handler(const char* name, syntax_t syntax)
 void dict_enlarge(struct dict* dict);
 
 void dict_reinsert(struct dict*, struct dict_entry*);
-
-void* dict_put(struct dict* dict, const char* key, void* value)
-{
-	if ((dict->size == 0) || (dict->used * 2 > dict->size))
-		dict_enlarge(dict);
-
-	int hash = strhash(key);
-	int index = hash_to_index(hash, dict->size);
-
-	while (true) {
-		struct dict_entry* entry = &dict->data[index];
-
-		if (entry->key == NULL) {
-			entry->key = strdup(key);
-			entry->value = value;
-			entry->hash = hash;
-			dict->used++;
-			return NULL;
-		}
-
-		int diff = compare_entry(entry, hash, key);
-		if (diff < 0) {
-			index = (index + 1) % dict->size;
-			continue;
-		} else if (diff == 0) {
-			void* old = entry->value;
-			entry->value = value;
-			return old;
-		} else {
-			struct dict_entry present = *entry;
-			entry->key = strdup(key);
-			entry->value = value;
-			entry->hash = hash;
-			dict_reinsert(dict, &present);
-			return NULL;
-		}
-	}
-}
 
 //
 
@@ -1195,30 +1138,7 @@ void dict_enlarge(struct dict* d)
 
 #include <assert.h>
 
-void dict_reinsert(struct dict* dict, struct dict_entry* entry)
-{
-	int index = hash_to_index(entry->hash, dict->size);
-	while (true) {
-		struct dict_entry* cell = &dict->data[index];
-
-		if (cell->key == NULL) {
-			*cell = *entry;
-			dict->used++;
-			return;
-		}
-
-		int diff = compare_entry(cell, entry->hash, entry->key);
-		if (diff < 0) {
-			index = (index + 1) % dict->size;
-		} else if (diff == 0) {
-			DIE("Should never happen");
-		} else {
-			struct dict_entry tmp = *cell;
-			*cell = *entry;
-			*entry = tmp;
-		}
-	}
-}
+void dict_reinsert(struct dict* dict, struct dict_entry* entry);
 
 int strhash(const char* key)
 {
@@ -1646,7 +1566,7 @@ object_t wrap_symbol(const char* v)
 		symbol->value = strdup(v);
 		symbol->hash = hash;
 		result = object_init(symbol, &TYPE_SYMBOL);
-		dict_put(&ALL_SYMBOLS, v, result);
+		dict_put(&ALL_SYMBOLS, symbol, result);
 	}
 	incref(result);
 	return result;
@@ -1873,7 +1793,7 @@ scope_t default_scope()
 void scope_bind(scope_t scope, symbol_t key, object_t value)
 {
 	const char* strkey = unwrap_symbol(key);
-	void* ptr = dict_put(&scope->s_binds, strkey, value);
+	void* ptr = dict_put(&scope->s_binds, key, value);
 	if (ptr != NULL)
 		DIE("Rebind of %s", strkey);
 	if (! scope->s_parent)
@@ -1987,11 +1907,11 @@ void register_stdlib_functions(void);
 
 void setup_runtime()
 {
+	dict_init(&ALL_SYMBOLS);
+	array_init(&ALL_OBJECTS);
 	dict_init(&SYNTAX_HANDLERS);
 	setup_syntax();
-	array_init(&ALL_OBJECTS);
 	scope_init(&DEFAULT_SCOPE, NULL);
-	dict_init(&ALL_SYMBOLS);
 	register_stdlib_functions();
 	execute_file("stdlib.scm");
 }
@@ -2013,9 +1933,9 @@ void teardown_runtime()
 	scope_dispose(&DEFAULT_SCOPE);
 	dict_decref(&ALL_SYMBOLS);
 	dict_dispose(&ALL_SYMBOLS);
+	teardown_syntax();
 	collect_garbage();
 	array_dispose(&ALL_OBJECTS);
-	teardown_syntax();
 }
 
 //
@@ -2572,7 +2492,7 @@ void set_in_scope(scope_t scope, symbol_t key, object_t value)
 	while (s) {
 		object_t old_value = dict_lookup_fast(&s->s_binds, strkey, strhash(strkey));
 		if (old_value) {
-			dict_put(&s->s_binds, strkey, value);
+			dict_put(&s->s_binds, key, value);
 			if (! s->s_parent) {
 				incref(value);
 				decref(old_value);
@@ -2621,6 +2541,82 @@ object_t native_display(int argct, object_t* args)
 	else
 		print_object(stdout, args[0]);
 	return wrap_nil();
+}
+
+syntax_t lookup_syntax_handler(symbol_t name)
+{
+	const char* key = unwrap_symbol(name);
+	return dict_lookup_fast(&SYNTAX_HANDLERS, key, name->hash);
+}
+
+void* dict_put(struct dict* dict, symbol_t sym, void* value)
+{
+	if ((dict->size == 0) || (dict->used * 2 > dict->size))
+		dict_enlarge(dict);
+
+	int hash = sym->hash;
+	int index = hash_to_index(hash, dict->size);
+
+	while (true) {
+		struct dict_entry* entry = &dict->data[index];
+
+		if (entry->key == NULL) {
+			entry->key = sym;
+			entry->value = value;
+			dict->used++;
+			return NULL;
+		}
+
+		int diff = compare_entry(entry, hash, sym->value);
+		if (diff < 0) {
+			index = (index + 1) % dict->size;
+			continue;
+		} else if (diff == 0) {
+			void* old = entry->value;
+			entry->value = value;
+			return old;
+		} else {
+			struct dict_entry present = *entry;
+			entry->key = sym;
+			entry->value = value;
+			dict_reinsert(dict, &present);
+			return NULL;
+		}
+	}
+}
+
+int compare_entry(struct dict_entry* entry, int hash, const char* key)
+{
+	if (entry->key->hash == hash) {
+		return strcmp(entry->key->value, key);
+	} else {
+		return entry->key->hash - hash;
+	}
+}
+
+void dict_reinsert(struct dict* dict, struct dict_entry* entry)
+{
+	int index = hash_to_index(entry->key->hash, dict->size);
+	while (true) {
+		struct dict_entry* cell = &dict->data[index];
+
+		if (cell->key == NULL) {
+			*cell = *entry;
+			dict->used++;
+			return;
+		}
+
+		int diff = compare_entry(cell, entry->key->hash, entry->key->value);
+		if (diff < 0) {
+			index = (index + 1) % dict->size;
+		} else if (diff == 0) {
+			DIE("Should never happen");
+		} else {
+			struct dict_entry tmp = *cell;
+			*cell = *entry;
+			*entry = tmp;
+		}
+	}
 }
 
 void setup_syntax(void)
