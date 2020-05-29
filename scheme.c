@@ -936,6 +936,16 @@ object_t pop_list_or_die(object_t* ptr)
 
 //
 
+symbol_t assert_symbol(const char* context, object_t obj)
+{
+	symbol_t sym = to_symbol(obj);
+	if (sym)
+		return sym;
+	DIE("Expected %s to be a symbol, got %s instead", context, typename(obj));
+}
+
+//
+
 void eval_define(scope_t eval_scope, scope_t bind_scope, symbol_t key, object_t expr);
 object_t lambda(scope_t scope, object_t params, object_t body);
 
@@ -946,9 +956,7 @@ object_t syntax_define(scope_t scope, object_t code)
 	pair_t head_pair = to_pair(head);
 	if (head_pair) {
 		object_t name_obj = car(head_pair);
-		symbol_t name = to_symbol(name_obj);
-		if (! name)
-			DIE("Expected variable name in define to be a symbol, got %s instead", typename(name_obj));
+		symbol_t name = assert_symbol("variable name in define", name_obj);
 
 		object_t args = cdr(head_pair);
 		object_t func = lambda(scope, args, code);
@@ -1574,7 +1582,7 @@ void dispose_string(void* obj)
 void print_string(FILE* out, void* obj)
 {
 	string_t str = obj;
-	fprintf(out, "%s", str->value);
+	fprintf(out, "\"%s\"", str->value);
 }
 
 struct type TYPE_STRING = {
@@ -2495,6 +2503,24 @@ object_t native_list_to_string(int argct, object_t* args) // list->string
 	return wrap_string(buffer);
 }
 
+object_t native_string_to_list(int argct, object_t* args) // string->list
+{
+	assert_arg_count("string->list", argct, 1);
+	string_t str = to_string_or_die("string->list", args[0]);
+	const char* text = unwrap_string(str);
+
+	object_t acc = wrap_nil();
+	while (*text) {
+		object_t ch = wrap_char(*text);
+		push_list(&acc, ch);
+		decref(ch);
+		text++;
+	}
+	object_t result = reverse(acc);
+	decref(acc);
+	return result;
+}
+
 object_t native_string_equal(int argct, object_t* args) // string=?
 {
 	assert_arg_count("string=?", argct, 2);
@@ -2527,15 +2553,63 @@ object_t native_string_ref(int argct, object_t* args) // string-ref
 	return wrap_char(ch);
 }
 
-void scope_set(scope_t scope, symbol_t key, object_t value)
+void set_in_scope(scope_t scope, symbol_t key, object_t value)
 {
 	const char* strkey = unwrap_symbol(key);
-	object_t old_value = dict_put(&scope->s_binds, strkey, value);
-	if (! scope->s_parent) {
-		incref(value);
-        if (old_value)
-                decref(old_value);
-    }
+	scope_t s = scope;
+
+	while (s) {
+		object_t old_value = dict_lookup(&s->s_binds, strkey);
+		if (old_value) {
+			dict_put(&s->s_binds, strkey, value);
+			if (! s->s_parent) {
+				incref(value);
+				decref(old_value);
+			}
+			return;
+		}
+		s = s->s_parent;
+	}
+	DIE("Variable %s is not bound to anything", strkey);
+}
+
+object_t syntax_set(scope_t scope, object_t code) // set!
+{
+	object_t head = pop_list_or_die(&code);
+	symbol_t key =assert_symbol("variable name in set!", head);
+	object_t expr = pop_list_or_die(&code);
+	object_t value = eval_eager(scope, expr);
+	set_in_scope(scope, key, value);
+	decref(value);
+	return wrap_nil();
+}
+
+object_t native_string_set(int argct, object_t* args) // string-set!
+{
+	assert_arg_count("string-set!", argct, 3);
+	string_t str = to_string_or_die("string-set!", args[0]);
+	int index = unbox_int_or_die("string-set!", args[1]);
+	char_t ch = to_char_or_die("string-set!", args[2]);
+	str->value[index - 1] = ch->value;
+	incref(args[0]);
+	return args[0];
+}
+
+object_t native_not(int argct, object_t* args)
+{
+	assert_arg_count("not", argct, 1);
+	return wrap_bool(args[0] == wrap_bool(false));
+}
+
+object_t native_display(int argct, object_t* args)
+{
+	assert_arg_count("display", argct, 1);
+	string_t str = to_string(args[0]);
+	if (str)
+		printf("%s", str->value);
+	else
+		print_object(stdout, args[0]);
+	return wrap_nil();
 }
 
 void setup_syntax(void)
@@ -2549,6 +2623,7 @@ void setup_syntax(void)
 	register_syntax_handler("letrec", syntax_letrec);
 	register_syntax_handler("or", syntax_or);
 	register_syntax_handler("quote", syntax_quote);
+	register_syntax_handler("set!", syntax_set);
 }
 
 void register_stdlib_functions(void)
@@ -2562,20 +2637,24 @@ void register_stdlib_functions(void)
 	register_native("car", native_car);
 	register_native("cdr", native_cdr);
 	register_native("cons", native_cons);
+	register_native("display", native_display);
 	register_native("eq?", native_eqp);
 	register_native("fold", native_fold);
 	register_native("list", native_list);
 	register_native("list->string", native_list_to_string);
 	register_native("modulo", native_modulo);
 	register_native("newline", native_newline);
+	register_native("not", native_not);
 	register_native("null?", native_nullp);
 	register_native("open-input-file", native_open_input_file);
 	register_native("pair?", native_pairp);
 	register_native("read-char", native_read_char);
 	register_native("reverse", native_reverse);
 	register_native("set-cdr!", native_setcdr);
+	register_native("string->list", native_string_to_list);
 	register_native("string-length", native_string_length);
 	register_native("string-ref", native_string_ref);
+	register_native("string-set!", native_string_set);
 	register_native("string=?", native_string_equal);
 	register_native("symbol?", native_symbolp);
 	register_native("write", native_write);

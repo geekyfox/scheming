@@ -249,3 +249,236 @@
 (writeln (prime-factors 315))
 (writeln (prime-factors 331155))
 (writeln (prime-factors 3311555))
+
+; problem #99
+(define (crossword filename)
+	(crossword-solve (list (read-crossword filename))))
+
+(define (crossword-solve puzzles)
+	(cond
+		((null? puzzles)
+			"No solution")
+		((not (car puzzles))
+			(crossword-solve (cdr puzzles)))
+		((null? (caar puzzles))
+			(list-ref (car puzzles) 3))
+		(else
+			(crossword-solve
+				(append
+					(fork (car puzzles))
+					(cdr puzzles))))))
+
+(define (fork puzzle)
+	(let* (
+			(slots (list-ref puzzle 1))
+			(slot (car slots))
+			(slot-length (list-ref slot 4))
+			(words (list-ref puzzle 2))
+			(grid (list-ref puzzle 3))
+			(selected-words (select-words slot-length words))
+			(inject (lambda (ws)
+				(let* (
+						(new-grid (fit grid slot (car ws))))
+					(if
+						new-grid
+						(list (cdr slots) (cdr ws) new-grid)
+						#f)))))
+		(map inject selected-words)))
+
+(define (fit grid slot word)
+	(let* (
+			(dir (list-ref slot 1))
+			(col (list-ref slot 2))
+			(row (list-ref slot 3))
+			(letters (string->list word)))
+		(if
+			(eq? dir 'vertical)
+			(fit-vertical grid letters col row)
+			(fit-horizontal grid letters col row))))
+
+(define (fit-vertical grid letters x y)
+	(cond
+		((null? letters) 
+			grid)
+		((eq? (grid-get grid x y) (car letters))
+			(fit-vertical
+				grid
+				(cdr letters)
+				x
+				(+ y 1)))
+		((eq? (grid-get grid x y) #\.)
+			(fit-vertical
+				(grid-set grid x y (car letters))
+				(cdr letters)
+				x
+				(+ y 1)))
+		(else
+			#f)))
+
+(define (fit-horizontal grid letters x y)
+	(cond
+		((null? letters) 
+			grid)
+		((eq? (grid-get grid x y) #\.)
+			(fit-horizontal
+				(grid-set grid x y (car letters))
+				(cdr letters)
+				(+ x 1)
+				y))
+		(else
+			#f)))
+
+
+(define (grid-set grid x y letter) 
+	(if (= y 1)
+		(cons
+			(string-set (car grid) x letter)
+			(cdr grid))
+		(cons
+			(car grid)
+			(grid-set (cdr grid) x (- y 1) letter))))
+
+(define (string-set str ix ch)
+	(let* (
+			(copy (string-copy str)))
+		(string-set! copy ix ch)
+		copy))
+
+(define (select-words len words)
+	(letrec (
+			(acc '())
+			(push! (lambda (v)
+				(set! acc (cons v acc))))
+			(save! (lambda (ws backlog)
+				(push! (append ws backlog))))
+			(scan! (lambda (ws backlog)
+				(cond
+					((null? ws)
+						'())
+					((= len (string-length (car ws)))
+						(save! ws backlog)
+						(scan! (cdr ws) (cons (car ws) backlog)))
+					(else
+						(scan! (cdr ws) (cons (car ws) backlog)))))))
+		(scan! words '())
+		acc))
+
+(define (read-crossword-data filename)
+	(letrec (
+			(f (lambda (acc lines)
+				(if
+					(string=? (car lines) "")
+					(cons (reverse acc) (cdr lines))
+					(f (cons (car lines) acc) (cdr lines))))))
+		(f '() (read-lines (open-input-file filename)))))
+
+(define (read-crossword filename)
+	(let* (
+			(data (read-crossword-data filename))
+			(words (car data))
+			(grid (cdr data))
+			(v-slots (detect-v-slots grid))
+			(h-slots (detect-h-slots grid))
+			(slots (append v-slots h-slots)))
+		(list (reverse slots) words grid)))
+
+(define (read-lines port)
+	(letrec (
+			(f (lambda (acc) (g acc (read-line port))))
+			(g (lambda (acc line)
+				(if
+					(eof-object? line)
+					(reverse acc)
+					(f (cons line acc))))))
+		(f '())))
+
+(define (read-line port)
+	(letrec (
+			(f (lambda (acc) (g acc (read-char port))))
+			(g (lambda (acc ch)
+				(if
+					(or (eof-object? ch) (eq? ch #\newline))
+					(h ch acc)
+					(f (cons ch acc)))))
+			(h (lambda (ch acc)
+				(if
+					(and (eof-object? ch) (null? acc))
+					ch
+					(list->string (reverse acc))))))
+		(f '())))
+
+(define (grid-get grid col row)
+	(if
+		(= row 1)
+		(string-ref (car grid) (- col 1))
+		(grid-get (cdr grid) col (- row 1))))
+
+(define (detect-v-slots grid)
+	(letrec (
+			(height (length grid))
+			(width (string-length (car grid)))
+            (get (lambda (x y)
+				(grid-get grid x y)))
+			(convert (lambda (x y len)
+				(list 'vertical x y len))))
+	  (detect-slots get convert width height)))
+
+
+(define (detect-h-slots grid)
+	(letrec (
+			(height (length grid))
+			(width (string-length (car grid)))
+            (get (lambda (x y)
+				(grid-get grid y x)))
+			(convert (lambda (x y len)
+				(list 'horizontal y x len))))
+	  (detect-slots get convert height width)))
+
+
+(define (detect-slots get convert x-max y-max)
+	(letrec (
+			(dot? (lambda (x y)
+				(eq? (get x y) #\.)))
+			(acc '())
+			(push! (lambda (item)
+				(set! acc (cons item acc))))
+			(save! (lambda (x y-start y-end)
+				(if (> y-end y-start)
+				  (push! (convert x y-start (+ 1 (- y-end y-start)))))))
+			(scan! (lambda (x)
+                (scan-col! x)
+                (if (< x x-max)
+                  (scan! (+ x 1)))))
+            (scan-col! (lambda (x)
+				(if
+					(dot? x 1)
+					(scan-yes! x 1 2)
+					(scan-no! x 2))))
+            (scan-yes! (lambda (x y-yes y-scan)
+                (cond
+                    ((> y-scan y-max)
+                        (save! x y-yes y-max))
+                    ((dot? x y-scan)
+                        (scan-yes! x y-yes (+ y-scan 1)))
+                    (else
+                        (save! x y-yes (- y-scan 1))
+                        (scan-no! x (+ y-scan 1))))))
+            (scan-no! (lambda (x y-scan)
+                (cond
+					((> y-scan y-max)
+						'())
+					((dot? x y-scan)
+						(scan-yes! x y-scan (+ y-scan 1)))
+					(else
+						(scan-no! x (+ y-scan 1)))))))
+	(scan! 1)
+	acc))
+
+(define (display-grid grid)
+	(cond
+		((not (null? grid))
+			(display (car grid))
+			(newline)
+			(display-grid (cdr grid)))))
+
+(display-grid (crossword "test/p99a.dat"))

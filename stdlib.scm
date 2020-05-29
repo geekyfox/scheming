@@ -39,3 +39,7 @@
 (define eof-object? null?)
 
 (define (> a b) (< b a))
+
+(define (string-copy s)
+	(list->string (string->list s)))
+
