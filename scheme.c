@@ -2527,6 +2527,17 @@ object_t native_string_ref(int argct, object_t* args) // string-ref
 	return wrap_char(ch);
 }
 
+void scope_set(scope_t scope, symbol_t key, object_t value)
+{
+	const char* strkey = unwrap_symbol(key);
+	object_t old_value = dict_put(&scope->s_binds, strkey, value);
+	if (! scope->s_parent) {
+		incref(value);
+        if (old_value)
+                decref(old_value);
+    }
+}
+
 void setup_syntax(void)
 {
 	register_syntax_handler("and", syntax_and);
