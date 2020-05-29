@@ -51,47 +51,51 @@
 	(letrec (
 			(height (length grid))
 			(width (string-length (car grid)))
-			(dot? (lambda (col row)
-				(eq? (grid-get grid col row) #\.)))
-			(save (lambda (acc col st-row row)
-				(if
-					(= 1 (- row st-row))
-					acc
-					(cons
-						(list 'vertical col st-row (- row st-row))
-						acc))))
-			(f (lambda (acc col)
-				(if
-					(> col width)
-					acc
-					(f (g acc col) (+ col 1)))))
-			(g (lambda (acc col)
-				(if
-					(dot? col 1)
-					(h acc col 1 2)
-					(k acc col 2))))
-			(h (lambda (acc col st-row row)
-				(cond
-					((> row height)
-						(save acc col st-row row))
-					((dot? col row)
-						(h acc col st-row (+ 1 row)))
-					(else
-						(k 
-							(save acc col st-row row)
-							col (+ 1 row))))))
-			(k (lambda (acc col row)
-				(cond
-					((> row height)
-						acc)
-					((dot? col row)
-						(h acc col row (+ 1 row)))
-					(else
-						(k acc col (+ 1 row)))))))
-	;(dot? 1 2)))
-	;(g '() 1)))
-	(f '() 1)))
+            (get (lambda (x y)
+				(grid-get grid x y)))
+			(convert (lambda (x y len)
+				(list 'vertical x y len))))
+	  (detect-slots get convert width height)))
 
+
+(define (detect-slots get convert x-max y-max)
+	(letrec (
+			(dot? (lambda (x y)
+				(eq? (get x y) #\.)))
+			(acc '())
+			(push! (lambda (item) 
+				(set! acc (cons item acc))))
+			(save! (lambda (x y-start y-end)
+				(if (> y-end y-start)
+				  (push! (convert x y-start (+ 1 (- y-end y-start)))))))
+			(scan! (lambda (x)
+                (scan-col! x)
+                (if (< x max-x)
+                  (scan! (+ x 1)))))
+            (scan-col! (lambda (x)
+				(if
+					(dot? x 1)
+					(scan-yes! x 1 2)
+					(scan-no! x 2))))
+            (scan-yes! (lambda (x y-yes y-scan)
+                (cond
+                    ((> y-scan y-max)
+                        (save! x y-yes y-max))
+                    ((dot? x y-scan)
+                        (scan-yes! x y-yes (+ y-scan 1)))
+                    (else
+                        (save! x y-yes (- y-scan 1))
+                        (scan-no! x (+ y-scan 1))))))
+            (scan-no! (lambda (x y-scan)
+                (cond
+					((> y-scan y-max)
+						'())
+					((dot? x y-scan)
+						(scan-yes! x y-scan (+ y-scan 1)))
+					(else
+						(scan-no! x (+ y-scan 1)))))))
+	(scan-yes! 1 1 2)
+	acc))
 
 (write (crossword "test/p99a.dat"))
 ;(crossword "test/p99a.dat")
