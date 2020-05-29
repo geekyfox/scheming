@@ -1027,11 +1027,15 @@ void teardown_syntax();
 void register_syntax_handler(const char* name, syntax_t handler);
 
 void* dict_lookup(struct dict*, const char*);
+void* dict_lookup_fast(struct dict*, const char*, int hash);
+
+int strhash(const char*);
 
 syntax_t lookup_syntax_handler(symbol_t name)
 {
 	const char* key = unwrap_symbol(name);
-	return dict_lookup(&SYNTAX_HANDLERS, key);
+	int hash = strhash(key);
+	return dict_lookup_fast(&SYNTAX_HANDLERS, key, hash);
 }
 
 //
@@ -1081,12 +1085,11 @@ int hash_to_index(int hash, int size)
 	return index;
 }
 
-void* dict_lookup(struct dict* dict, const char* key)
+void* dict_lookup_fast(struct dict* dict, const char* key, int hash)
 {
 	if (dict->size == 0)
 		return NULL;
 
-	int hash = strhash(key);
 	int size = dict->size;
 	int index = hash_to_index(hash, size);
 	while (true) {
@@ -1103,6 +1106,11 @@ void* dict_lookup(struct dict* dict, const char* key)
 			return NULL;
 		}
 	}
+}
+
+void* dict_lookup(struct dict* dict, const char* key)
+{
+	return dict_lookup_fast(dict, key, strhash(key));
 }
 
 //
@@ -1603,6 +1611,7 @@ struct object* wrap_string(const char* v)
 struct symbol {
 	struct object self;
 	char* value;
+	int hash;
 };
 
 typedef struct symbol* symbol_t;
@@ -1630,10 +1639,12 @@ struct dict ALL_SYMBOLS;
 
 object_t wrap_symbol(const char* v)
 {
-	object_t result = dict_lookup(&ALL_SYMBOLS, v);
+	int hash = strhash(v);
+	object_t result = dict_lookup_fast(&ALL_SYMBOLS, v, hash);
 	if (! result) {
 		symbol_t symbol = malloc(sizeof(struct symbol));
 		symbol->value = strdup(v);
+		symbol->hash = hash;
 		result = object_init(symbol, &TYPE_SYMBOL);
 		dict_put(&ALL_SYMBOLS, v, result);
 	}
@@ -1820,7 +1831,7 @@ typedef struct scope* scope_t;
 object_t lookup_in_scope(scope_t scope, symbol_t key)
 {
 	while (scope) {
-		void* value = dict_lookup(&scope->s_binds, key->value);
+		void* value = dict_lookup_fast(&scope->s_binds, key->value, key->hash);
 		if (value)
 			return value;
 		scope = scope->s_parent;
@@ -2559,7 +2570,7 @@ void set_in_scope(scope_t scope, symbol_t key, object_t value)
 	scope_t s = scope;
 
 	while (s) {
-		object_t old_value = dict_lookup(&s->s_binds, strkey);
+		object_t old_value = dict_lookup_fast(&s->s_binds, strkey, strhash(strkey));
 		if (old_value) {
 			dict_put(&s->s_binds, strkey, value);
 			if (! s->s_parent) {
