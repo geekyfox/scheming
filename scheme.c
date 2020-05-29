@@ -1079,7 +1079,7 @@ void dict_init(struct dict* dict)
 int strhash(const char*);
 int compare_entry(struct dict_entry* entry, int hash, const char* key);
 
-inline int hash_to_index(int hash, int size)
+int hash_to_index(int hash, int size)
 {
 	int index = hash % size;
 	if (index < 0)
@@ -1667,14 +1667,13 @@ object_t lambda(scope_t scope, object_t params, object_t body)
 struct thunk {
 	struct object self;
 	lambda_t lambda;
-	int argct;
-	object_t* args;
+	struct array args;
 };
 
 void thunk_dispose(void* obj)
 {
 	thunk_t thunk = obj;
-	free(thunk->args);
+	array_dispose(&thunk->args);
 	free(obj);
 }
 
@@ -1682,8 +1681,8 @@ void thunk_reach(void* obj)
 {
 	thunk_t thunk = obj;
 	mark_reachable(thunk->lambda);
-	for (int i=thunk->argct-1; i>=0; i--)
-		mark_reachable(thunk->args[i]);
+	for (int i=thunk->args.size-1; i>=0; i--)
+		mark_reachable(thunk->args.data[i]);
 }
 
 struct type THUNK = {
@@ -1696,8 +1695,7 @@ object_t make_thunk(lambda_t lambda, array_t args)
 {
 	thunk_t thunk = malloc(sizeof(struct thunk));
 	thunk->lambda = lambda;
-	thunk->argct = args->size;
-	thunk->args = (object_t*)args->data;
+	thunk->args = *args;
 	object_t result = object_init(thunk, &THUNK);
 	array_decref(args);
 	return result;
@@ -1741,7 +1739,7 @@ object_t invoke(object_t func, int argct, object_t* args)
 
 object_t eval_thunk(thunk_t thunk)
 {
-	return invoke_lambda(thunk->lambda, thunk->argct, thunk->args);
+	return invoke_lambda(thunk->lambda, thunk->args.size, (object_t*)thunk->args.data);
 }
 
 //
