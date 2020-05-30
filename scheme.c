@@ -492,7 +492,8 @@ object_t read_atom(FILE* in)
 // characters for as long as it looks like an atom, then convert it to
 // an `object_t` and that's pretty much it.
 //
-// Well, syntax for characters in Scheme is a bit wonky.
+// Well, syntax for characters in Scheme is a bit wonky, you have `#\!` for
+// an exclamation mark.
 //
 // And now I'm looking at another buffer and do you know what actually
 // boggles my mind?
