@@ -286,15 +286,14 @@
 		(map inject selected-words)))
 
 (define (fit grid slot word)
-	(let* (
+	(let (
 			(dir (list-ref slot 1))
 			(col (list-ref slot 2))
-			(row (list-ref slot 3))
-			(letters (string->list word)))
+			(row (list-ref slot 3)))
 		(if
 			(eq? dir 'vertical)
-			(fit-vertical grid letters col row)
-			(fit-horizontal grid letters col row))))
+			(fit-vertical grid (string->list word) col row)
+			(fit-horizontal grid word col row))))
 
 (define (fit-vertical grid letters x y)
 	(cond
@@ -315,19 +314,23 @@
 		(else
 			#f)))
 
-(define (fit-horizontal grid letters x y)
-	(cond
-		((null? letters) 
-			grid)
-		((eq? (grid-get grid x y) #\.)
-			(fit-horizontal
-				(grid-set grid x y (car letters))
-				(cdr letters)
-				(+ x 1)
-				y))
-		(else
-			#f)))
-
+(define (fit-horizontal grid word x y)
+	(letrec (
+			(grid-sliced (split grid (- y 1)))
+			(rows-before (car grid-sliced))
+			(row-and-after (cadr grid-sliced))
+			(rows-after (cdr row-and-after))
+			(row (car row-and-after))
+			(new-row (string-append
+				(substring row 0 (- x 1))
+				word
+				(substring row
+					(+ x (string-length word) -1)
+					(string-length row))))
+			(new-grid (append
+				rows-before
+				(cons new-row rows-after))))
+		new-grid))
 
 (define (grid-set grid x y letter) 
 	(if (= y 1)
@@ -379,8 +382,8 @@
 			(grid (cdr data))
 			(v-slots (detect-v-slots grid))
 			(h-slots (detect-h-slots grid))
-			(slots (append v-slots h-slots)))
-		(list (reverse slots) words grid)))
+			(slots (append h-slots v-slots)))
+		(list slots words grid)))
 
 (define (read-lines port)
 	(letrec (
@@ -423,7 +426,6 @@
 				(list 'vertical x y len))))
 	  (detect-slots get convert width height)))
 
-
 (define (detect-h-slots grid)
 	(letrec (
 			(height (length grid))
@@ -433,7 +435,6 @@
 			(convert (lambda (x y len)
 				(list 'horizontal y x len))))
 	  (detect-slots get convert height width)))
-
 
 (define (detect-slots get convert x-max y-max)
 	(letrec (

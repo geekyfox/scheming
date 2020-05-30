@@ -434,20 +434,15 @@ object_t read_string(FILE* in)
 // Okay, back to business. Let's `parse_atom()`.
 //
 
-object_t parse_atom(const char*);
-
-bool isatomic(char ch)
+bool isspecial(char ch)
 {
-	if (isspace(ch))
-		return false;
-	switch (ch) {
-	case '(':
-	case ')':
-	case ';':
-	case '"':
+	switch (ch)
+	{
+	case '(': case ')': case ';': case '\"': case '\'':
+		return true;
+	default:
 		return false;
 	}
-	return true;
 }
 
 int fgetc_read_atom(FILE* in)
@@ -455,10 +450,23 @@ int fgetc_read_atom(FILE* in)
 	int ch = fgetc_or_die(in);
 	if (ch == EOF)
 		return EOF;
-	if (isatomic(ch))
-		return ch;
-	ungetc(ch, in);
-	return EOF;
+	if (isspace(ch) || isspecial(ch)) {
+		ungetc(ch, in);
+		return EOF;
+	}
+	return ch;
+}
+
+object_t parse_atom(const char*);
+object_t wrap_char(char ch);
+
+object_t read_character(FILE* in)
+{
+	int ch = fgetc_or_die(in);
+	if ((ch == EOF) || isspace(ch))
+		return wrap_char(' ');
+	else
+		return wrap_char(ch);
 }
 
 object_t read_atom(FILE* in)
@@ -471,6 +479,10 @@ object_t read_atom(FILE* in)
 		if (fill >= 10240)
 			DIE("Buffer overflow");
 	}
+
+	if ((fill == 2) && (buffer[0] == '#') && (buffer[1] == '\\'))
+		return read_character(in);
+
 	buffer[fill] = '\0';
 	return parse_atom(buffer);
 }
@@ -479,6 +491,12 @@ object_t read_atom(FILE* in)
 // Pretty much the same approach as in `read_string()`: collect
 // characters for as long as it looks like an atom, then convert it to
 // an `object_t` and that's pretty much it.
+//
+
+
+
+
+
 //
 // And now I'm looking at another buffer and do you know what actually
 // boggles my mind?
@@ -501,8 +519,12 @@ object_t read_atom(FILE* in)
 // Okay, enough of ranting, let's `parse_atom()`.
 //
 
+
+
+
+
 object_t wrap_bool(bool v);
-object_t wrap_char(char ch);
+
 object_t wrap_int(int value);
 object_t wrap_symbol(const char*);
 
@@ -817,7 +839,7 @@ void array_init(array_t arr)
 void array_dispose(struct array* arr)
 {
 	if (ARRAY_POOL_CT == 1024) {
-		free(arr->data);			
+		free(arr->data);
 	} else {
 		arr->size = 0;
 		ARRAY_POOL[ARRAY_POOL_CT++] = *arr;
@@ -916,11 +938,19 @@ object_t native_nullp(int argct, object_t* args) // null?
 
 //
 
+#define DEBUG(obj) do { \
+	fprintf(stderr, "[%s:%d] ", __FILE__, __LINE__); \
+	print_object(stderr, obj); \
+	fprintf(stderr, "\n"); \
+} while (0)
+
 pair_t to_pair_or_die(const char* name, object_t obj)
 {
 	pair_t pair = to_pair(obj);
-	if (! pair)
+	if (! pair) {
+		DEBUG(obj);
 		DIE("Expected argument of %s to be a pair, got %s instead", name, typename(obj));
+	}
 	return pair;
 }
 
@@ -2174,10 +2204,10 @@ object_t native_num_mult(int argct, object_t* args) // *
 
 object_t native_num_plus(int argct, object_t* args) // +
 {
-	assert_arg_count("+", argct, 2);
-	int a = unbox_int_or_die("+", args[0]);
-	int b = unbox_int_or_die("+", args[1]);
-	return wrap_int(a + b);
+	int n = 0;
+	for (int i=0; i<argct; i++)
+		n += unbox_int_or_die("+", args[i]);
+	return wrap_int(n);
 }
 
 object_t native_pairp(int argct, object_t* args) // pair?
@@ -2279,12 +2309,31 @@ object_t syntax_letrec(scope_t outer_scope, object_t code)
 	object_t binding;
 
 	while ((binding = pop_list(&bindings))) {
-		object_t key = pop_list_or_die(&binding);
-		symbol_t keysym = to_symbol(key);
-		if (! keysym)
-			DIE("Expected letrec binding name to be a symbol, got %s instead", typename(key));
+		object_t keyobj = pop_list_or_die(&binding);
 		object_t expr = pop_list_or_die(&binding);
-		eval_define(scope, scope, keysym, expr);
+		symbol_t key = assert_symbol("letrec binding name", keyobj);
+		eval_define(scope, scope, key, expr);
+	}
+
+	object_t result = eval_block(scope, code);
+
+	decref(scope_obj);
+	return result;
+}
+
+object_t syntax_let(scope_t outer_scope, object_t code)
+{
+	object_t scope_obj = derive_scope(outer_scope);
+	scope_t scope = to_scope(scope_obj);
+
+	object_t bindings = pop_list_or_die(&code);
+	object_t binding;
+
+	while ((binding = pop_list(&bindings))) {
+		object_t keyobj = pop_list_or_die(&binding);
+		symbol_t key = assert_symbol("let binding name", keyobj);
+		object_t expr = pop_list_or_die(&binding);
+		eval_define(outer_scope, scope, key, expr);
 	}
 
 	object_t result = eval_block(scope, code);
@@ -2705,6 +2754,49 @@ void dict_reinsert(struct dict* dict, struct dict_entry* entry)
 	}
 }
 
+object_t native_string_copy(int argct, object_t* args) // string-copy
+{
+	assert_arg_count("string-copy", argct, 1);
+	string_t str = to_string_or_die("string-copy", args[0]);
+	return wrap_string(unwrap_string(str));
+}
+
+object_t native_string_append(int argct, object_t* args) // string-append
+{
+	char buffer[10240];
+	int fill = 0;
+	for (int i=0; i<argct; i++) {
+		string_t strobj = to_string_or_die("string-append", args[i]);
+		const char* str = unwrap_string(strobj);
+		while (*str) {
+			if (fill >= 10239)
+				DIE("Buffer overflow");
+			buffer[fill++] = *(str++);
+		}
+	}
+	buffer[fill] = '\0';
+	return wrap_string(buffer);
+}
+
+object_t native_substring(int argct, object_t* args)
+{
+	assert_arg_count("string-copy", argct, 3);
+	string_t strobj = to_string_or_die("substring", args[0]);
+	const char* str = unwrap_string(strobj);
+	int start = unbox_int_or_die("substring", args[1]);
+	int end = unbox_int_or_die("substring", args[2]);
+	char buffer[10240];
+	int fill = 0;
+
+	for (int i=start; i<end; i++) {
+		if (fill >= 10239)
+			DIE("Buffer overflow");
+		buffer[fill++] = str[i];
+	}
+	buffer[fill] = '\0';
+	return wrap_string(buffer);
+}
+
 void setup_syntax(void)
 {
 	register_syntax_handler("and", syntax_and);
@@ -2712,6 +2804,7 @@ void setup_syntax(void)
 	register_syntax_handler("define", syntax_define);
 	register_syntax_handler("if", syntax_if);
 	register_syntax_handler("lambda", syntax_lambda);
+	register_syntax_handler("let", syntax_let);
 	register_syntax_handler("let*", syntax_letseq);
 	register_syntax_handler("letrec", syntax_letrec);
 	register_syntax_handler("or", syntax_or);
@@ -2745,10 +2838,13 @@ void register_stdlib_functions(void)
 	register_native("reverse", native_reverse);
 	register_native("set-cdr!", native_setcdr);
 	register_native("string->list", native_string_to_list);
+	register_native("string-append", native_string_append);
+	register_native("string-copy", native_string_copy);
 	register_native("string-length", native_string_length);
 	register_native("string-ref", native_string_ref);
 	register_native("string-set!", native_string_set);
 	register_native("string=?", native_string_equal);
+	register_native("substring", native_substring);
 	register_native("symbol?", native_symbolp);
 	register_native("write", native_write);
 }
