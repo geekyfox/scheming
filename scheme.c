@@ -312,8 +312,8 @@ object_t read_object(FILE* in)
 // Scheme spec, but basically it's a way to specify that ```'(+ 1 2)``` is
 // *literally* a list with three elements and not an expression that adds
 // two numbers),
-// * and atoms, which are pretty much everything else including numbers
-// and symbols.
+// * and atoms, which are pretty much everything else including numbers,
+// characters, and symbols.
 //
 // So what we're doing here is we're looking at the first non-trivial
 // character in the input stream and if it's an opening parenthesis we
@@ -351,14 +351,12 @@ int fgetc_skip(FILE* in)
 
 //
 // Oh, and "the first non-trivial character" means we fast-forward through
-// the input stream ignoring comments and whitespace until we either
-// encounter a character that's neither or reach an EOF.
+// the input stream ignoring comments and whitespace until we encounter
+// a character that's neither or reach an EOF.
 //
 // There are four `read_something()` functions that we promised to
 // implement, let's start with `read_string()`.
 //
-
-object_t wrap_string(const char*);
 
 int fgetc_read_string(FILE* in)
 {
@@ -367,7 +365,7 @@ int fgetc_read_string(FILE* in)
 	switch (ch) {
 	case EOF:
 		DIE("Premature end of input");
-	case '"':
+	case '\"':
 		return EOF;
 	case '\\':
 		ch = fgetc_or_die(in);
@@ -381,6 +379,8 @@ int fgetc_read_string(FILE* in)
 
 	return ch;
 }
+
+object_t wrap_string(const char*);
 
 object_t read_string(FILE* in)
 {
@@ -398,9 +398,9 @@ object_t read_string(FILE* in)
 }
 
 //
-// Nothing surprising here, just read characters into a buffer until you
-// reach the closing double quote, then wrap the contents of the buffer
-// into an `object_t` and call it a day.
+// Nothing particularly surprising here, just read characters into a
+// buffer until you reach the closing double quote, then wrap the
+// contents of the buffer into an `object_t` and call it a day.
 //
 // Yes, this simplistic implementation will miserably fail to parse a
 // source file with a string constant that is longer than 10K characters.
@@ -492,7 +492,7 @@ object_t read_atom(FILE* in)
 // characters for as long as it looks like an atom, then convert it to
 // an `object_t` and that's pretty much it.
 //
-
+// Well, syntax for characters in Scheme is a bit wonky.
 //
 // And now I'm looking at another buffer and do you know what actually
 // boggles my mind?
