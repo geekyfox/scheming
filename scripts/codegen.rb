@@ -1,11 +1,30 @@
 #!/usr/bin/env ruby
 
+def fix_indent(line)
+  indent = ''
+
+  while true do
+    if line.start_with? "\t"
+      indent += "\t"
+      line = line[1..-1]
+    elsif line.start_with? "    "
+      indent += "\t"
+      line = line[4..-1]
+    else
+      return indent + line
+    end
+  end
+end
+
 syntax_to_func = {}
 native_to_func = {}
 skip = false
+skip_empty = true
 
 STDIN.each_line do |line|
-  line = line.rstrip
+  line = fix_indent(line.rstrip)
+
+  next if line.empty? && skip_empty
 
   m = line.match(%r{^object_t (syntax_.+)\(.+\) // (\S+)$})
   syntax_to_func[m.captures[1]] = m.captures[0] if m
@@ -19,12 +38,13 @@ STDIN.each_line do |line|
   m = line.match(%r{^object_t native_(.+)\(.+\)$})
   native_to_func[m.captures[0]] = 'native_' + m.captures[0] if m  
 
-  skip ||= line.strip == 'void setup_syntax(void)'
-  skip ||= line.strip == 'void register_stdlib_functions(void)'
+  skip = true if line == 'void setup_syntax(void)'
+  skip = true if line == 'void register_stdlib_functions(void)'
 
   puts line unless skip
 
-  skip &&= line.strip != '}'
+  skip_empty = line.empty? || skip
+  skip = false if line == '}'
 end
 
 puts 'void setup_syntax(void)'
@@ -35,6 +55,7 @@ syntax_to_func.sort.each do |keyword, func|
 end
 
 puts '}'
+puts ''
 puts 'void register_stdlib_functions(void)'
 puts '{'
 
@@ -42,4 +63,4 @@ native_to_func.sort.each do |keyword, func|
   puts "\tregister_native(\"#{keyword}\", #{func});"
 end
 
-print '}'
+puts '}'

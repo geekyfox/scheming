@@ -13,6 +13,11 @@ codegen:
 	cat scheme.c | scripts/codegen.rb > temp/scheme.c
 	mv temp/scheme.c scheme.c
 
+.PHONY: clean
+clean:
+	rm -f scheme
+	rm -rf temp
+
 CC = gcc
 CFLAGS = -Wall -g
 
@@ -24,6 +29,12 @@ cut: temp/cut
 
 temp/cut : temp/cut.c
 	$(CC) $(CFLAGS) $< -o $@
+
+.PHONY: gaps 
+gaps: temp/gaps.txt
+
+temp/gaps.txt : temp/cut.c
+	make cut 2>&1 | grep undefined | awk '{print $$NF}' | sort -u | tee $@
 
 temp/cut.c : scheme.c
 	@mkdir -p temp
@@ -38,10 +49,7 @@ grind: scheme
 grind_leaks: scheme
 	valgrind --leak-check=full --show-leak-kinds=all ./scheme pro99.scm
 
-profile:
+profile.txt: scheme pro99.scm
+	rm -f callgrind.out.*
 	valgrind --tool=callgrind ./scheme pro99.scm
-
-.PHONY: clean
-clean:
-	rm -f scheme
-	rm -rf temp
+	callgrind_annotate --tree=both > profile.txt
