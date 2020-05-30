@@ -1772,7 +1772,7 @@ void thunk_reach(void* obj)
 		mark_reachable(thunk->args.data[i]);
 }
 
-struct type THUNK = {
+struct type TYPE_THUNK = {
 	.name = "thunk",
 	.size = sizeof(struct thunk),
 	.reach = thunk_reach,
@@ -1781,17 +1781,17 @@ struct type THUNK = {
 
 object_t make_thunk(lambda_t lambda, array_t args)
 {
-	thunk_t thunk = allocate_object(&THUNK);
+	thunk_t thunk = allocate_object(&TYPE_THUNK);
 	thunk->lambda = lambda;
 	thunk->args = *args;
-	object_t result = object_init(thunk, &THUNK);
+	object_t result = object_init(thunk, &TYPE_THUNK);
 	array_decref(args);
 	return result;
 }
 
 thunk_t to_thunk(object_t obj)
 {
-	if (obj->type == &THUNK)
+	if (obj->type == &TYPE_THUNK)
 		return (thunk_t)obj;
 	return NULL;
 }
@@ -1879,7 +1879,7 @@ void scope_dispose(void* obj)
 		reclaim(obj);
 }
 
-struct type SCOPE = {
+struct type TYPE_SCOPE = {
 	.name = "scope",
 	.size = sizeof(struct scope),
 	.reach = scope_reach,
@@ -1950,14 +1950,14 @@ void scope_init(scope_t scope, scope_t parent)
 {
 	dict_init(&scope->s_binds);
 	scope->s_parent = parent;
-	object_init(&scope->self, &SCOPE);
+	object_init(&scope->self, &TYPE_SCOPE);
 }
 
 //
 
 object_t derive_scope(scope_t parent)
 {
-	scope_t scope = allocate_object(&SCOPE);
+	scope_t scope = allocate_object(&TYPE_SCOPE);
 	scope_init(scope, parent);
 	return (object_t)scope;
 }
@@ -1966,7 +1966,7 @@ object_t derive_scope(scope_t parent)
 
 scope_t to_scope(object_t obj)
 {
-	if (obj->type == &SCOPE)
+	if (obj->type == &TYPE_SCOPE)
 		return (scope_t)obj;
 	return NULL;
 }
