@@ -451,20 +451,15 @@ Okay, back to business. Let's `parse_atom()`.
 
 ``` c
 
-object_t parse_atom(const char*);
-
-bool isatomic(char ch)
+bool isspecial(char ch)
 {
-	if (isspace(ch))
-		return false;
-	switch (ch) {
-	case '(':
-	case ')':
-	case ';':
-	case '"':
+	switch (ch)
+	{
+	case '(': case ')': case ';': case '\"': case '\'':
+		return true;
+	default:
 		return false;
 	}
-	return true;
 }
 
 int fgetc_read_atom(FILE* in)
@@ -472,10 +467,23 @@ int fgetc_read_atom(FILE* in)
 	int ch = fgetc_or_die(in);
 	if (ch == EOF)
 		return EOF;
-	if (isatomic(ch))
-		return ch;
-	ungetc(ch, in);
-	return EOF;
+	if (isspace(ch) || isspecial(ch)) {
+		ungetc(ch, in);
+		return EOF;
+	}
+	return ch;
+}
+
+object_t parse_atom(const char*);
+object_t wrap_char(char ch);
+
+object_t read_character(FILE* in)
+{
+	int ch = fgetc_or_die(in);
+	if ((ch == EOF) || isspace(ch))
+		return wrap_char(' ');
+	else
+		return wrap_char(ch);
 }
 
 object_t read_atom(FILE* in)
@@ -488,6 +496,10 @@ object_t read_atom(FILE* in)
 		if (fill >= 10240)
 			DIE("Buffer overflow");
 	}
+
+	if ((fill == 2) && (buffer[0] == '#') && (buffer[1] == '\\'))
+		return read_character(in);
+
 	buffer[fill] = '\0';
 	return parse_atom(buffer);
 }
@@ -497,6 +509,10 @@ object_t read_atom(FILE* in)
 Pretty much the same approach as in `read_string()`: collect
 characters for as long as it looks like an atom, then convert it to
 an `object_t` and that's pretty much it.
+
+``` c
+
+```
 
 And now I'm looking at another buffer and do you know what actually
 boggles my mind?
@@ -521,7 +537,7 @@ Okay, enough of ranting, let's `parse_atom()`.
 ``` c
 
 object_t wrap_bool(bool v);
-object_t wrap_char(char ch);
+
 object_t wrap_int(int value);
 object_t wrap_symbol(const char*);
 

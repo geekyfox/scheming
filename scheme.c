@@ -493,10 +493,6 @@ object_t read_atom(FILE* in)
 // an `object_t` and that's pretty much it.
 //
 
-
-
-
-
 //
 // And now I'm looking at another buffer and do you know what actually
 // boggles my mind?
@@ -518,10 +514,6 @@ object_t read_atom(FILE* in)
 //
 // Okay, enough of ranting, let's `parse_atom()`.
 //
-
-
-
-
 
 object_t wrap_bool(bool v);
 
