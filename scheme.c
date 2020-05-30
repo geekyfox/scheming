@@ -500,6 +500,8 @@ object_t read_atom(FILE* in)
 //
 // Except for `#\)`.
 //
+// BAR!
+//
 // And now I'm looking at another buffer and do you know what actually
 // boggles my mind?
 //
