@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
 
+require 'English'
+
 def embed(filename, section)
   flag = false
 
@@ -7,9 +9,8 @@ def embed(filename, section)
   File.open(filename).each_line do |line|
     if line.start_with? ';'
       flag = line[1..-1].strip == section
-    end
-    if flag
-      puts line
+    elsif flag
+      puts line.rstrip
     end
   end
   puts '```'
@@ -18,10 +19,9 @@ end
 state = :text
 STDIN.each_line do |line|
   line = line.rstrip
-  # m = line.match(%r{// embed (.*) : (.*)})
   if line =~ %r{// embed (.*) : (.*)}
-    puts '```' if state == :code    
-    embed($~[1], $~[2])
+    puts '```' if state == :code
+    embed($LAST_MATCH_INFO[1], $LAST_MATCH_INFO[2])
     state = :text
   elsif line.start_with? '//'
     if state == :code

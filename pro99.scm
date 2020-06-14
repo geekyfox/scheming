@@ -4,26 +4,46 @@
 		x
 		(my-last (cdr x))))
 
-(writeln (my-last '(a b c d)))
+(write (my-last '(a b c d)))
+(newline)
 
 ; problem #2
+(define (cddr x)
+	(cdr (cdr x)))
+
 (define (my-but-last x)
 	(if (null? (cddr x))
 		x
 		(my-but-last (cdr x))))
 
-(writeln (my-but-last '(a b c d)))
+(write (my-but-last '(a b c d)))
+(newline)
 
 ; problem #3
+(define (list-ref lst ix)
+	(if (= ix 1)
+		(car lst)
+		(list-ref (cdr lst) (- ix 1))))
+
 (define element-at list-ref)
 
 (writeln (element-at '(a b c d e) 3))
 
 ; problem #4
-(writeln (length '(a b c d e)))
+(define (length lst)
+	(letrec (
+			(impl (lambda (lst count)
+				(if (null? lst)
+					count
+					(impl (cdr lst) (+ count 1))))))
+		(impl lst 0)))
+
+(write (length '(a b c d e)))
+(newline)
 
 ; problem #5
-(writeln (reverse '(a b c d e)))
+(write (reverse '(a b c d e)))
+(newline)
 
 ; problem #6
 (define (palindrome? x)
@@ -170,6 +190,27 @@
 
 (writeln (rotate '(a b c d e f g h) 3))
 (writeln (rotate '(a b c d e f g h) -2))
+
+; problem #20
+(define (remove-at xs n)
+	(letrec (
+			(f (lambda (acc ys k)
+				(if (= k n)
+					(g acc (cdr ys))
+					(f
+						(cons (car ys) acc)
+						(cdr ys)
+						(+ k 1)))))
+			(g (lambda (acc ys)
+				(if (null? acc)
+					ys
+					(g
+						(cdr acc)
+						(cons (car acc) ys))))))
+		(f '() xs 1)))
+
+(write (remove-at '(a b c d) 2))
+(newline)
 
 ; problem #31
 

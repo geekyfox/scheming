@@ -1,3 +1,4 @@
+// # Geeky Fox Is Scheming
 // [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 // ## Chapter 1 where the story begins
 //
@@ -795,31 +796,133 @@ object_t read_quote(FILE* in)
 // Since `'bla` is merely a shorter version of `(quote bla)` parsing it
 // is trivial, and with that in place we're finally done with parsing
 // and can move on to
-// CUTOFF
 // ## Chapter 3 where I evaluate
+// By the way, I don't know if you noticed or not, but I try to use the
+// word "we" as sparingly as I can. Perhaps it has something to do with me
+// coming from a culture where "We" is commonly associated with the
+// dystopian novel by Yevgeny Zamyatin.
+//
+// Of course there are legit usages for "we," such as academic writing
+// where all of "us" are listed on the front page of the paper, and the
+// reader is much more interested in overall results than in the internal
+// dynamics of the research team.
+//
+// But using "we did it" when it's actually "I did it" (and it's
+// stylistically appropriate to say "I did it") feels to me like speaker
+// is a wimp who wants to avoid the responsibility.
+//
+// Likewise, using "we" when it's actually "I and Joe, mostly Joe" feels
+// like reluctanse to give a fair share of credit.
+//
+// Okay, enough of that, let's implement `eval_repl()`
+//
 
 struct scope;
 typedef struct scope* scope_t;
 
 object_t eval_eager(scope_t scope, object_t expr);
-scope_t default_scope(void);
+scope_t get_repl_scope(void);
 
 object_t eval_repl(object_t expr)
 {
-	return eval_eager(default_scope(), expr);
+	return eval_eager(get_repl_scope(), expr);
 }
 
 //
+// That's a one-liner function that relies on two important concepts.
+//
+// First one is the scope. Scope is pretty much just a binding between
+// variables' names and their values. For now just think of it as a sort
+// of a dictionary (it's not exactly that, but we'll get there)
+//
+// Another one is differentiation between eager and lazy evaluation.
+// Before I go into explaining *what exactly do I mean by eager and
+// lazy evaluation* in the context of this story, I first have to
+// elaborate the pragmatics for having all that at the first place.
+//
+// So. Scheme is a functional programming language, and in functional
+// programming people don't do loops, but instead they do recursion. And
+// for infinite loops they do, well, infinite recursion. And "infinite"
+// here doesn't mean "very very big," but actually infinite.
+//
+// Consider this example:
+//
+// embed snippets/infinite-loop.scm : infinite loop
+//
+// Obviously, a direct equivalent of this code in vanilla
+// C/C++/Ruby/Python/Java will run for some time, and eventually
+// blow up with a stack overflow. But code in Scheme, well, better
+// shouldn't.
+//
+// I have three ways to deal with it:
+//
+// 1. Just do nothing and hope that C stack will not overflow.
+//
+// 2. Do code rewriting so that under the hood the snippet above is
+// automagically converted into a loop, e.g.
+//
+// embed snippets/infinite-loop.scm : infinite loop rewritten
+//
+// 3. Apply the technique called trampolining. Semantically it means
+//
+// embed snippets/infinite-loop.scm : infinite loop trampoline
+//
+// that instead of calling itself, function... Well, to generalize and
+// to simplify let's say it informs the evaluator that computation is
+// incomplete, and also tells what to do next in order to complete it.
+//
+// #1 looks like a joke, but actually it's a pretty good solution. It's
+// also a pretty bad solution, but let's get through the upsides first.
+//
+// First of all, it's very easy to implement (because it doesn't require
+//  writing any specific code), it clearly won't introduce any complicated
+// bugs (because there's no specific code!), and it won't have any
+// performance impact (because it does nothing!!)
+//
+// You see, "*just do nothing*" half of it is all good, it's the "*and hope
+// that*" part that isn't. Although, for simple examples it doesn't
+// really matter: with a couple of thousands of stack levels it's gonna be
+// fine with or without optimizations. But a more complex program may
+// eventually hit that boundary, and then I'll have to get around
+// deficiencies of my code in, well, my other code, and that's not a
+// place I'd like to get myself into.
+//
+// Which also sets a constraint on what a "proper" solution should be:
+// it must be provably reliable for a complex piece of code, or else it's
+// back to square one.
+//
+// #2 looks like a superfun thing to play with, and for toy snippets it
+// seems deceptively simple. But thinking just a little bit about
+// pesky stuff like mutually recursive functions, and
+// self-modifying-ish code (think `(set! infinite-loop something-else)`
+// *from within* `infinite-loop`), and escape procedures, and all this
+// starts to feel like a breeding ground for wacky corner cases, and
+// I don't want to commit to being able to weed them all out.
+//
+// #3 on the contrary is very simple, both conceptually and
+// implementation-wise, so that's what I'll do (although I might
+// do #2 on top of it later; because it looks like a superfun thing to
+// play with)
+//
+// Now let's get back to lazy vs eager. "Lazy" in this context means
+// that evaluation function may return either a result (if computation
+// is finished) or a thunk (a special object that describes what to do
+// next). Whereas "eager" means that evaluation function will always
+// return the final result.
+//
 
-object_t eval_force(object_t);
 object_t eval_lazy(scope_t scope, object_t expr);
+object_t force(object_t value);
 
 object_t eval_eager(scope_t scope, object_t expr)
 {
-	object_t result = eval_lazy(scope, expr);
-	return eval_force(result);
+	object_t result_or_thunk = eval_lazy(scope, expr);
+	return force(result_or_thunk);
 }
 
+//
+// "Eager" evaluation can be easily arranged by getting a "lazy" result
+// first...
 //
 
 struct thunk;
@@ -828,19 +931,43 @@ typedef struct thunk* thunk_t;
 object_t eval_thunk(thunk_t thunk);
 thunk_t to_thunk(object_t obj);
 
-object_t eval_force(object_t result)
+object_t force(object_t value)
 {
 	thunk_t thunk;
 
-	while((thunk = to_thunk(result))) {
-		object_t new_result = eval_thunk(thunk);
-		decref(result);
-		result = new_result;
+	while((thunk = to_thunk(value))) {
+		object_t new_value = eval_thunk(thunk);
+		decref(value);
+		value = new_value;
 	}
 
-	return result;
+	return value;
 }
 
+//
+// ...and then reevaluating it until the computation is complete.
+//
+// You know, I've just realized it's the third time in this story when I
+// say "I have three ways to deal with it," previous two being
+// considerations about memory management and error handling in
+// Chapter 1.
+//
+// Moreover, I noticed a pattern. In a generalized form, those three
+// options to choose from are:
+//
+// 1. Consider yourself lucky. Assume things won't go wrong. Don't
+// worry about your solution being too optimistic.
+//
+// 2. Consider yourself smart. Assume you'll be able to fix every bug.
+// Don't worry about your solution being too complex.
+//
+// 3. Just bloody admit that you're a dumb loser. Design a balanced
+// solution that is resilient while still reasonable.
+//
+// This is such a deep topic that I'm not even going to try to cover it
+// in one take, but I'm damn sure I'll be getting back to it repeatedly.
+//
+// For now, let's continue with `eval_lazy()`
 //
 
 struct symbol;
@@ -848,23 +975,28 @@ typedef struct symbol* symbol_t;
 
 symbol_t to_symbol(object_t);
 
-object_t eval_sexpr(scope_t, pair_t);
+object_t eval_sexpr(scope_t, object_t head, object_t body);
 object_t eval_var(scope_t scope, symbol_t key);
 
 object_t eval_lazy(scope_t scope, object_t expr)
 {
-	pair_t sexpr = to_pair(expr);
-	if (sexpr)
-		return eval_sexpr(scope, sexpr);
-
 	symbol_t varname = to_symbol(expr);
 	if (varname)
 		return eval_var(scope, varname);
+
+	pair_t sexpr = to_pair(expr);
+	if (sexpr)
+		return eval_sexpr(scope, car(sexpr), cdr(sexpr));
 
 	incref(expr);
 	return expr;
 }
 
+//
+// This is fairly straightforward: if it's a symbol, treat it as a name
+// of the variable, if it's a list, treat it as a symbolic expression, and
+// otherwise just evaluate it to itself (so that `(eval "bla")` is simply
+// `"bla"`)
 //
 
 object_t lookup_in_scope(scope_t scope, symbol_t key);
@@ -880,102 +1012,62 @@ object_t eval_var(scope_t scope, symbol_t key)
 }
 
 //
+// Evaluating a variable is pretty much just look it up in the current
+// scope and `DIE()` if it's not there.
+//
 
-object_t eval_syntax(scope_t scope, symbol_t keyword, object_t body);
 object_t eval_funcall(scope_t scope, object_t func, object_t exprs);
+object_t eval_syntax(scope_t scope, object_t syntax, object_t body);
 
-object_t eval_sexpr(scope_t scope, pair_t code)
+object_t eval_sexpr(scope_t scope, object_t head, object_t body)
 {
-	object_t head = car(code), tail = cdr(code);
-	symbol_t head_sym = to_symbol(head);
+	object_t syntax_or_func = eval_eager(scope, head);
 
-	if (head_sym) {
-		object_t result = eval_syntax(scope, head_sym, tail);
-		if (result)
-			return result;
-	}
+	object_t result = eval_syntax(scope, syntax_or_func, body);
+	if (! result)
+		result = eval_funcall(scope, syntax_or_func, body);
 
-	object_t func = eval_eager(scope, head);
-	object_t result = eval_funcall(scope, func, tail);
-	decref(func);
-
+	decref(syntax_or_func);
 	return result;
 }
 
 //
-
-typedef object_t (*syntax_t)(scope_t scope, object_t code);
-syntax_t lookup_syntax_handler(symbol_t name);
-
-object_t eval_syntax(scope_t scope, symbol_t keyword, object_t body)
-{
-	syntax_t handler = lookup_syntax_handler(keyword);
-	return (handler == NULL) ? NULL : handler(scope, body);
-}
-
+// And evaluating an expression is... Well, if you ever wondered why
+// the hell they use so many of those bloody parentheses in Lisps,
+// here's your answer.
 //
-
-struct array {
-	void** data;
-	int available;
-	int size;
-};
-
-typedef struct array* array_t;
-
-#include <strings.h>
-
-struct array ARRAY_POOL[1024];
-int ARRAY_POOL_CT = 0;
-
-void array_init(array_t arr)
-{
-	if (ARRAY_POOL_CT > 0)
-		*arr = ARRAY_POOL[--ARRAY_POOL_CT];
-	else
-		bzero(arr, sizeof(struct array));
-}
-
-void array_dispose(struct array* arr)
-{
-	if (ARRAY_POOL_CT == 1024) {
-		free(arr->data);
-	} else {
-		arr->size = 0;
-		ARRAY_POOL[ARRAY_POOL_CT++] = *arr;
-	}
-
-	bzero(arr, sizeof(struct array));
-}
-
-void dispose_array_pool()
-{
-	while (ARRAY_POOL_CT)
-		free(ARRAY_POOL[--ARRAY_POOL_CT].data);
-}
-
-void array_push(array_t arr, void* entry)
-{
-	if (arr->size == arr->available) {
-		arr->available *= 2;
-		if (arr->available < 8)
-			arr->available = 8;
-		arr->data = realloc(arr->data, sizeof(void*)*arr->available);
-	}
-	arr->data[arr->size++] = entry;
-}
-
-void decref_many(int argct, object_t* args)
-{
-	for (int i=argct-1; i>=0; i--)
-		decref(args[i]);
-}
-
-void array_decref(array_t arr)
-{
-	decref_many(arr->size, (object_t*)arr->data);
-}
-
+// In most programming languages (mainstream ones anyway) syntax
+// constructs and functions are two fundamentally different kinds of
+// creatures. They don't just *behave* differently, but they also *look*
+// differently, and you can't mix them up.
+//
+// Much less so in Lisp, where you have `(if foo bar)` for conditional,
+// and `(+ foo bar)` to add two numbers, and `(cons foo bar)` to make
+// a pair, and you can't help but notice they look pretty darn similar.
+//
+// Moreover, even though they behave differently, it's not that *that
+// dissimilar* either. `+` and `cons` are simply functions that accept
+// *values* of `foo` and `bar`and do something with them. Whereas
+// `if` is also simply a function, except that instead of values of its'
+// arguments it accepts *a chunk of code verbatim.*
+//
+// Let me reiterate: a syntax construct is merely a *data-manipulation
+// function* that happens to have *program's code as the data that it
+// manipulates.* Oh,  and *code as data* is not some runtime
+// introspection shamanistic voodoo, it's just normal lists and symbols
+// and what have you.
+//
+// And all of that is facilitated by having the same notation of data
+// and code. That's why parentheses are so cool.
+//
+// So, with explanation above in mind, pretty much all this function does
+// is: it evaluates the first item of the S-expression, and if it happens to
+// be an "I want code as is" function, then it's fed code as is, and
+// otherwise it is treated as an "I want values of the arguments" function
+// instead. That's it.
+//
+// If my little story is your first encounter with Lisp, I can imagine
+// how mind-blowing can this be. Let it sink in, take your time.
 //
 
 struct lambda;
@@ -983,44 +1075,53 @@ typedef struct lambda* lambda_t;
 
 lambda_t to_lambda(object_t);
 
-void eval_args(array_t, scope_t, object_t);
-object_t invoke(object_t func, int argct, object_t* args);
-object_t make_thunk(lambda_t, array_t);
+object_t invoke(object_t, int, object_t*);
+object_t wrap_thunk(lambda_t, int, object_t*);
 
 object_t eval_funcall(scope_t scope, object_t func, object_t exprs)
 {
-	struct array args;
-	object_t result;
-	lambda_t lambda;
+	object_t args[64], expr;
+	int argct = 0;
 
-	array_init(&args);
-	eval_args(&args, scope, exprs);
-
-	if ((lambda = to_lambda(func))) {
-		result = make_thunk(lambda, &args);
-	} else {
-		result = invoke(func, args.size, (object_t*)args.data);
-		array_dispose(&args);
+	while ((expr = pop_list(&exprs))) {
+		if (argct >= 64)
+			DIE("Buffer overflow");
+		args[argct++]  = eval_eager(scope, expr);
 	}
-	return result;
+
+	lambda_t lambda = to_lambda(func);
+	if (lambda)
+		return wrap_thunk(lambda, argct, args);
+
+	return invoke(func, argct, args);
 }
 
 //
-
-void array_init(array_t);
-
-void eval_args(array_t args, scope_t scope, object_t exprs)
-{
-	object_t expr;
-
-	while ((expr = pop_list(&exprs)))
-		array_push(args, eval_eager(scope, expr));
-}
-
+// This one is not very complicated: go through the list, evaluate
+// the stuff you have there, then either feed it to a function or make
+// a thunk to evaluate it later.
+//
+// There are few minor funky optimizations to mention though.
+//
+// 1. I put arguments into a buffer and not to a list. I mean, lists are
+// cool for everything except two things. They're not as efficient for
+// "just give me an element at index X" random access, and they're
+// kinda clumsy when it comes to memory allocation. And these are
+// two things I really won't mind having for a function call: as much
+// as I don't care about performance, having to do three `malloc()`s
+// just to call a function of three arguments feels sorta wasteful.
+//
+// 2. I introduce `lambda_t` type for functions that are implemented
+// in Scheme and require tail call optimizations. This is done to
+// separate them from built-in functions that are implemented in
+// C and are supposed to be hand-optimized so that lazy call overhead
+// is unnecessary.
+//
+// 3. I cap the maximum number of arguments that a function can have
+// at 64. I even drafted a rant to rationalize that, but I'm running out of
+// Chardonnay, so let's park it for now and move on to
+// ## Chapter 4 where I finally write some code in Scheme
 // CUTOFF
-
-// ## Chapter six
-//
 // embed pro99.scm : problem #1
 //
 
@@ -1035,6 +1136,10 @@ object_t native_nullp(int argct, object_t* args) // null?
 	assert_arg_count("null?", argct, 1);
 	return wrap_bool(is_nil(args[0]));
 }
+
+//
+
+void register_native(const char* name, object_t (*func)(int, object_t*));
 
 //
 
@@ -1058,12 +1163,86 @@ object_t native_cdr(int argct, object_t* args)
 
 //
 
-object_t pop_list_or_die(object_t* ptr)
+object_t native_write(int argct, object_t* args)
 {
-	object_t result = pop_list(ptr);
-	if (! result)
-		DIE("Premature end of list");
-	return result;
+	assert_arg_count("write", argct, 1);
+	write_object(stdout, args[0]);
+	return wrap_nil();
+}
+
+//
+
+object_t native_newline(int argct, object_t* args)
+{
+	assert_arg_count("newline", argct, 0);
+	fputs("\n", stdout);
+	return wrap_nil();
+}
+
+//
+
+bool eval_boolean(scope_t scope, object_t expr);
+
+object_t syntax_if(scope_t scope, object_t code)
+{
+	object_t test = pop_list(&code);
+	if (! test)
+		DIE("`if` without <test> part");
+
+	object_t consequent = pop_list(&code);
+	if (! consequent)
+		DIE("`if` without <consequent> part");
+
+	if (eval_boolean(scope, test))
+		return eval_lazy(scope, consequent);
+
+	object_t alternate = pop_list(&code);
+	if (alternate)
+		return eval_lazy(scope, alternate);
+
+	return wrap_nil();
+}
+
+//
+
+symbol_t assert_symbol(const char* context, object_t);
+void assign_name(object_t, symbol_t);
+void bind_in_scope(scope_t, symbol_t, object_t);
+object_t wrap_lambda(scope_t, object_t, object_t);
+
+object_t syntax_define(scope_t scope, object_t code)
+{
+	object_t head = pop_list(&code);
+	if (! head)
+		DIE("Malformed `define`");
+
+	pair_t head_pair = to_pair(head);
+	if (head_pair) {
+		object_t name_obj = car(head_pair);
+		symbol_t name = assert_symbol("variable name in `define`", name_obj);
+
+		object_t args = cdr(head_pair);
+		object_t func = wrap_lambda(scope, args, code);
+		assign_name(func, name);
+		bind_in_scope(scope, name, func);
+		decref(func);
+		return wrap_nil();
+	}
+
+	symbol_t variable = to_symbol(head);
+	if (variable) {
+		object_t expr = pop_list(&code);
+		if (! expr)
+			DIE("`define` block without <expression>");
+
+		object_t value = eval_eager(scope, expr);
+		assign_name(value, variable);
+		bind_in_scope(scope, variable, value);
+		decref(value);
+		return wrap_nil();
+	}
+
+	DIE("define is not implemented for %s", typename(head));
 }
 
 //
@@ -1076,55 +1255,280 @@ symbol_t assert_symbol(const char* context, object_t obj)
 	DIE("Expected %s to be a symbol, got %s instead", context, typename(obj));
 }
 
+// Chapter Six
+
+struct array {
+	void** data;
+	int available;
+	int size;
+};
+
+typedef struct array* array_t;
+
+void init_array(array_t);
+void reclaim_array(array_t);
+void push_array(array_t, void*);
+
+void push_array(array_t arr, void* entry)
+{
+	if (arr->size == arr->available) {
+		arr->available *= 2;
+		if (arr->available < 8)
+			arr->available = 8;
+		arr->data = realloc(arr->data, sizeof(void*)*arr->available);
+	}
+	arr->data[arr->size++] = entry;
+}
+
+//
+
+#include <strings.h>
+
+void init_array(array_t arr)
+{
+	bzero(arr, sizeof(struct array));
+}
+
+void reclaim_array(struct array* arr)
+{
+	free(arr->data);
+}
+
+void* pop_array(array_t);
+
+bool is_garbage(object_t);
+void mark_reachable(void*);
+void mark_reached(void*);
+void reclaim_object(object_t obj);
+void reset_gc_state(object_t);
+
+struct array ALL_OBJECTS;
+struct array REACHABLE_OBJECTS;
+
+void collect_garbage()
+{
+	object_t obj;
+
+	REACHABLE_OBJECTS.size = 0;
+
+	for (int i=ALL_OBJECTS.size-1; i>=0; i--)
+		reset_gc_state(ALL_OBJECTS.data[i]);
+
+	while ((obj = pop_array(&REACHABLE_OBJECTS)))
+		mark_reached(obj);
+
+	int count = ALL_OBJECTS.size, index = 0;
+
+	while (index < count) {
+		obj = ALL_OBJECTS.data[index];
+		if (! is_garbage(obj)) {
+			index++;
+			continue;
+		}
+		reclaim_object(obj);
+		ALL_OBJECTS.data[index] = ALL_OBJECTS.data[--count];
+	}
+
+	ALL_OBJECTS.size = count;
+}
+
+// Chapter Seven
+
+struct type {
+	const char* name;
+	void (*reach)(void*);
+	void (*dispose)(void*);
+	void (*write)(FILE*, void*);
+};
+
+typedef struct type* type_t;
+
+//
+
+struct object {
+	type_t type;
+	unsigned stackrefs;
+	enum {
+		GARBAGE,
+		REACHABLE,
+		REACHED
+	} gc_state;
+};
+
+//
+
+object_t register_object(void* ptr, const type_t type)
+{
+	static int threshold = 2560;
+
+	object_t obj = ptr;
+	obj->type = type;
+	obj->stackrefs = 1;
+	push_array(&ALL_OBJECTS, obj);
+
+	if (ALL_OBJECTS.size > threshold) {
+		collect_garbage();
+		threshold = ALL_OBJECTS.size * 2;
+	}
+
+	return obj;
+}
+
+void reset_gc_state(object_t obj)
+{
+	if (obj->stackrefs == 0) {
+		obj->gc_state = GARBAGE;
+	} else {
+		obj->gc_state = REACHABLE;
+		push_array(&REACHABLE_OBJECTS, obj);
+	}
+}
+
+//
+
+void write_object(FILE* out, object_t obj)
+{
+	if (obj->type->write)
+		obj->type->write(out, obj);
+	else
+		fprintf(out, "[%s@%p]", obj->type->name, obj);
+}
+
+//
+
+#include <assert.h>
+
+void decref(struct object* obj)
+{
+	assert(obj->stackrefs > 0);
+	obj->stackrefs--;
+}
+
+void incref(struct object* obj)
+{
+	obj->stackrefs++;
+}
+
+bool is_garbage(object_t obj)
+{
+	return obj->gc_state == GARBAGE;
+}
+
+const char* typename(object_t obj)
+{
+	return obj->type->name;
+}
+
+//
+
+void mark_reached(void* ptr)
+{
+	if (! ptr)
+		return;
+
+	object_t obj = ptr;
+	if (obj->gc_state == REACHED)
+		return;
+
+	obj->gc_state = REACHED;
+	if (obj->type->reach)
+		obj->type->reach(obj);
+}
+
+//
+
+// Chapter Eight
+
+struct pair {
+	struct object self;
+	object_t car;
+	object_t cdr;
+};
+
+//
+
+object_t car(pair_t pair)
+{
+	return pair->car;
+}
+
+object_t cdr(pair_t pair)
+{
+	return pair->cdr;
+}
+
+//
+
+void pair_reach(void* obj)
+{
+	pair_t pair = obj;
+	mark_reachable(pair->car);
+	mark_reachable(pair->cdr);
+}
+
+void write_pair(FILE* out, void* ptr)
+{
+	pair_t pair = ptr;
+
+	fputs("(", out);
+	write_object(out, car(pair));
+
+	object_t obj = cdr(pair);
+
+	while (true) {
+		if (is_nil(obj))
+			break;
+
+		pair = to_pair(obj);
+		if (pair) {
+			fputs(" ", out);
+			write_object(out, car(pair));
+			obj = cdr(pair);
+			continue;
+		}
+
+		fputs(" . ", out);
+		write_object(out, obj);
+		break;
+	}
+	fputs(")", out);
+}
+
+struct type TYPE_PAIR = {
+	.name = "pair",
+	.write = write_pair,
+	.reach = pair_reach,
+};
+
+object_t wrap_pair(object_t head, object_t tail)
+{
+	pair_t pair = malloc(sizeof(*pair));
+	pair->car = head;
+	pair->cdr = tail;
+	return register_object(pair, &TYPE_PAIR);
+}
+
+pair_t to_pair(object_t obj)
+{
+	if (obj->type == &TYPE_PAIR)
+		return (pair_t)obj;
+	return NULL;
+}
+
+// CUTOFF
+
+//
+
+lambda_t to_lambda(object_t);
+
+void eval_args(array_t, scope_t, object_t);
+object_t invoke(object_t func, int argct, object_t* args);
+
 //
 
 void eval_define(scope_t eval_scope, scope_t bind_scope, symbol_t key, object_t expr);
-object_t lambda(scope_t scope, object_t params, object_t body);
-
-object_t syntax_define(scope_t scope, object_t code)
-{
-	object_t head = pop_list_or_die(&code);
-
-	pair_t head_pair = to_pair(head);
-	if (head_pair) {
-		object_t name_obj = car(head_pair);
-		symbol_t name = assert_symbol("variable name in define", name_obj);
-
-		object_t args = cdr(head_pair);
-		object_t func = lambda(scope, args, code);
-		eval_define(scope, scope, name, func);
-		decref(func);
-		return wrap_nil();
-	}
-
-	symbol_t head_sym = to_symbol(head);
-	if (head_sym) {
-		object_t expr = pop_list_or_die(&code);
-		eval_define(scope, scope, head_sym, expr);
-		return wrap_nil();
-	}
-
-	DIE("define is not implemented for %s", typename(head));
-}
 
 //
-
-bool eval_boolean(scope_t scope, object_t expr);
-
-object_t syntax_if(scope_t scope, object_t code)
-{
-	object_t if_expr = pop_list_or_die(&code);
-	object_t then_expr = pop_list_or_die(&code);
-
-	if (eval_boolean(scope, if_expr))
-		return eval_lazy(scope, then_expr);
-
-	object_t else_expr = pop_list(&code);
-	if (else_expr)
-		return eval_lazy(scope, else_expr);
-
-	return wrap_nil();
-}
 
 //
 
@@ -1151,12 +1555,6 @@ struct dict {
 
 //
 
-static struct dict SYNTAX_HANDLERS;
-void setup_syntax();
-void teardown_syntax();
-
-void register_syntax_handler(const char* name, syntax_t handler);
-
 void* dict_lookup(struct dict*, const char*, int hash);
 
 int strhash(const char*);
@@ -1164,14 +1562,6 @@ int strhash(const char*);
 //
 
 void dict_dispose(struct dict*);
-
-void teardown_syntax()
-{
-	// for (int i=SYNTAX_HANDLERS.size-1; i>=0; i--)
-	// 	if (SYNTAX_HANDLERS.data[i].key)
-	// 		decref((object_t)SYNTAX_HANDLERS.data[i].key);
-	dict_dispose(&SYNTAX_HANDLERS);
-}
 
 //
 
@@ -1228,12 +1618,16 @@ void* dict_lookup_fast(struct dict* dict, const char* key, int hash)
 
 void* dict_put(struct dict*, symbol_t, void*);
 
-void register_syntax_handler(const char* name, syntax_t syntax)
-{
-	symbol_t sym = to_symbol(wrap_symbol(name));
-	dict_put(&SYNTAX_HANDLERS, sym, syntax);
-	decref((object_t)sym);
-}
+struct type TYPE_SYNTAX = {
+	.name = "syntax"
+};
+
+struct syntax {
+	struct object self;
+	object_t (*eval)(scope_t, object_t);
+};
+
+typedef struct syntax* syntax_t;
 
 //
 
@@ -1244,27 +1638,6 @@ void dict_reinsert(struct dict*, struct dict_entry*);
 //
 
 void* dict_put_impl(struct dict*, const char*, void*, int);
-
-void dict_enlarge(struct dict* d)
-{
-	if (d->size == 0) {
-		d->data = calloc(sizeof(struct dict_entry), 8);
-		d->size = 8;
-		return;
-	}
-	struct dict tmp;
-	tmp.used = 0;
-	tmp.size = d->size * 2;
-	tmp.data = calloc(sizeof(struct dict_entry), tmp.size);
-	for (int i=0; i<d->size; i++) {
-		struct dict_entry* entry = &d->data[i];
-		if (entry->key)
-			dict_reinsert(&tmp, entry);
-	}
-	free(d->data);
-	d->size = tmp.size;
-	d->data = tmp.data;
-}
 
 //
 
@@ -1282,51 +1655,17 @@ int strhash(const char* key)
 
 //
 
-struct array ALL_OBJECTS;
-
 bool is_garbage(object_t);
 bool hasrefs(object_t);
 void mark_garbage(object_t);
 
 void reach_object(void*);
 
-void object_dispose(object_t);
-
-struct array REACHABLE_OBJECTS;
-
-void reset_gc_state(object_t obj);
-
 void* pop_array(array_t arr)
 {
 	if (arr->size == 0)
 		return NULL;
    return arr->data[--arr->size];
-}
-
-void collect_garbage()
-{
-	array_init(&REACHABLE_OBJECTS);
-	for (int i=ALL_OBJECTS.size-1; i>=0; i--) {
-		object_t obj = ALL_OBJECTS.data[i];
-		reset_gc_state(obj);
-	}
-	while (REACHABLE_OBJECTS.size) {
-		object_t obj = pop_array(&REACHABLE_OBJECTS);
-		reach_object(obj);
-	}
-	free(REACHABLE_OBJECTS.data);
-	int count = ALL_OBJECTS.size;
-	int index = 0;
-	while (index < count) {
-		object_t obj = ALL_OBJECTS.data[index];
-		if (is_garbage(obj)) {
-			object_dispose(obj);
-			ALL_OBJECTS.data[index] = ALL_OBJECTS.data[--count];
-		} else {
-			index++;
-		}
-	}
-	ALL_OBJECTS.size = count;
 }
 
 //
@@ -1342,45 +1681,7 @@ void dict_reach(struct dict* dict)
 
 //
 
-struct type {
-	const char* name;
-	size_t size;
-	void (*reach)(void*);
-	void (*dispose)(void*);
-	void (*write)(FILE*, void*);
-};
-
-typedef struct type* type_t;
-
 //
-
-enum gc_state {
-	GARBAGE,
-	REACHABLE,
-	REACHED
-};
-
-struct object {
-	type_t type;
-	enum gc_state gc_state;
-	int stackrefs;
-};
-
-const char* typename(object_t obj)
-{
-	return obj->type->name;
-}
-
-void incref(struct object* obj)
-{
-	obj->stackrefs++;
-}
-
-void decref(struct object* obj)
-{
-	assert(obj->stackrefs > 0);
-	obj->stackrefs--;
-}
 
 bool hasrefs(object_t obj)
 {
@@ -1392,70 +1693,15 @@ void mark_garbage(object_t obj)
 	obj->gc_state = GARBAGE;
 }
 
-bool is_garbage(object_t obj)
-{
-	return obj->gc_state == GARBAGE;
-}
-
-//
-
-void reach_object(void* ptr)
-{
-	if (! ptr)
-		return;
-
-	object_t obj = ptr;
-	if (obj->gc_state == REACHED)
-		return;
-
-	obj->gc_state = REACHED;
-	if (obj->type->reach)
-		obj->type->reach(obj);
-}
-
 //
 
 array_t get_object_pool(type_t);
 
-void reclaim(object_t obj)
-{
-	if (obj->type->size) {
-		array_t mempool = get_object_pool(obj->type);
-		array_push(mempool, obj);
-	} else {
-		free(obj);
-	}
-}
-
-void object_dispose(object_t obj)
+void reclaim_object(object_t obj)
 {
 	if (obj->type->dispose)
 		obj->type->dispose(obj);
-	else
-		reclaim(obj);
-}
-
-//
-
-void write_object(FILE* out, object_t obj)
-{
-	if (obj->type->write)
-		obj->type->write(out, obj);
-	else
-		fprintf(out, "[%s@%p]", obj->type->name, obj);
-}
-
-//
-
-void gc_register(object_t);
-
-object_t object_init(void* ptr, const type_t type)
-{
-	object_t obj = ptr;
-	obj->type = type;
-	obj->stackrefs = 1;
-	gc_register(obj);
-	return obj;
+	free(obj);
 }
 
 //
@@ -1533,134 +1779,6 @@ object_t wrap_bool(bool v)
 
 //
 
-struct pair {
-	struct object self;
-	object_t car;
-	object_t cdr;
-};
-
-//
-
-object_t car(pair_t pair)
-{
-	return pair->car;
-}
-
-object_t cdr(pair_t pair)
-{
-	return pair->cdr;
-}
-
-//
-
-void write_pair(FILE* out, void* ptr)
-{
-	pair_t pair = ptr;
-
-	fputs("(", out);
-	write_object(out, car(pair));
-
-	object_t obj = cdr(pair);
-
-	while (true) {
-		if (is_nil(obj))
-			break;
-
-		pair = to_pair(obj);
-		if (pair) {
-			fputs(" ", out);
-			write_object(out, car(pair));
-			obj = cdr(pair);
-			continue;
-		}
-
-		fputs(" . ", out);
-		write_object(out, obj);
-		break;
-	}
-	fputs(")", out);
-}
-
-void pair_reach(void* obj)
-{
-	pair_t pair = obj;
-	mark_reachable(pair->car);
-	mark_reachable(pair->cdr);
-}
-
-struct type TYPE_PAIR = {
-	.name = "pair",
-	.size = sizeof(struct pair),
-	.write = write_pair,
-	.reach = pair_reach,
-};
-
-struct array POOL_24;
-struct array POOL_32;
-struct array POOL_40;
-
-array_t get_object_pool(type_t type)
-{
-	switch(type->size) {
-	case 24:
-		return &POOL_24;
-	case 32:
-		return &POOL_32;
-	case 40:
-		return &POOL_40;
-	default:
-		DIE("No memory pool for type %s (%lu bytes)", type->name, type->size);
-	}
-}
-
-void dispose_object_pools()
-{
-	object_t obj;
-
-	while ((obj = pop_array(&POOL_24)))
-		free(obj);
-	array_dispose(&POOL_24);
-	while ((obj = pop_array(&POOL_32)))
-		free(obj);
-	array_dispose(&POOL_32);
-	while ((obj = pop_array(&POOL_40)))
-		free(obj);
-	array_dispose(&POOL_40);
-}
-
-void* allocate_object(type_t type)
-{
-	array_t pool = get_object_pool(type);
-	object_t obj = pop_array(pool);
-	if (! obj)
-		obj = malloc(type->size);
-	obj->type = type;
-	return obj;
-}
-
-object_t register_object(void* ptr)
-{
-	object_t obj = ptr;
-	return object_init(ptr, obj->type);
-}
-
-object_t wrap_pair(object_t head, object_t tail)
-{
-	pair_t result = allocate_object(&TYPE_PAIR);
-	result->car = head;
-	result->cdr = tail;
-	return register_object(result);
-}
-
-pair_t to_pair(object_t obj)
-{
-	if (obj->type == &TYPE_PAIR)
-		return (pair_t)obj;
-	return NULL;
-}
-
-//
-
 struct integer {
 	struct object self;
 	int value;
@@ -1676,15 +1794,15 @@ void write_int(FILE* out, void* obj)
 
 struct type TYPE_INT = {
 	.name = "int",
-	.size = sizeof(struct integer),
+	// .size = sizeof(struct integer),
 	.write = write_int
 };
 
-struct object* wrap_int(int v)
+object_t wrap_int(int v)
 {
-	integer_t num = allocate_object(&TYPE_INT);
+	integer_t num = malloc(sizeof(*num));
 	num->value = v;
-	return object_init(num, &TYPE_INT);
+	return register_object(num, &TYPE_INT);
 }
 
 //
@@ -1700,7 +1818,6 @@ void dispose_string(void* obj)
 {
 	string_t str = obj;
 	free(str->value);
-	free(obj);
 }
 
 void write_string(FILE* out, void* obj)
@@ -1715,11 +1832,11 @@ struct type TYPE_STRING = {
 	.write = write_string,
 };
 
-struct object* wrap_string(const char* v)
+object_t wrap_string(const char* v)
 {
-	string_t str = malloc(sizeof(struct string));
+	string_t str = malloc(sizeof(*str));
 	str->value = strdup(v);
-	return object_init(str, &TYPE_STRING);
+	return register_object(str, &TYPE_STRING);
 }
 
 //
@@ -1742,7 +1859,6 @@ void symbol_dispose(void* obj)
 {
 	symbol_t symbol = obj;
 	free(symbol->value);
-	free(obj);
 }
 
 struct type TYPE_SYMBOL = {
@@ -1758,11 +1874,11 @@ object_t wrap_symbol(const char* v)
 	int hash = strhash(v);
 	object_t result = dict_lookup_fast(&ALL_SYMBOLS, v, hash);
 	if (! result) {
-		symbol_t symbol = malloc(sizeof(struct symbol));
-		symbol->value = strdup(v);
-		symbol->hash = hash;
-		result = object_init(symbol, &TYPE_SYMBOL);
-		dict_put(&ALL_SYMBOLS, symbol, result);
+		symbol_t sym = malloc(sizeof(*sym));
+		sym->value = strdup(v);
+		sym->hash = hash;
+		result = register_object(sym, &TYPE_SYMBOL);
+		dict_put(&ALL_SYMBOLS, sym, result);
 	}
 	incref(result);
 	return result;
@@ -1805,8 +1921,7 @@ void lambda_reach(void* obj)
 void lambda_dispose(void* obj)
 {
 	lambda_t lambda = obj;
-	array_dispose(&lambda->l_params);
-	free(obj);
+	reclaim_array(&lambda->l_params);
 }
 
 struct type TYPE_LAMBDA = {
@@ -1822,22 +1937,21 @@ lambda_t to_lambda(object_t obj)
 	return NULL;
 }
 
-object_t lambda(scope_t scope, object_t params, object_t body)
+object_t wrap_lambda(scope_t scope, object_t params, object_t body)
 {
-	object_t param;
-
-	lambda_t lambda = malloc(sizeof(struct lambda));
+	lambda_t lambda = malloc(sizeof(*lambda));
 	lambda->l_name = NULL;
 	lambda->l_body = body;
 	lambda->l_scope = scope;
-	array_init(&lambda->l_params);
+	init_array(&lambda->l_params);
 
+	object_t param;
 	while ((param = pop_list(&params))) {
 		assert(to_symbol(param));
-		array_push(&lambda->l_params, param);
+		push_array(&lambda->l_params, param);
 	}
 
-	return object_init(lambda, &TYPE_LAMBDA);
+	return register_object(lambda, &TYPE_LAMBDA);
 }
 
 //
@@ -1845,92 +1959,36 @@ object_t lambda(scope_t scope, object_t params, object_t body)
 struct thunk {
 	struct object self;
 	lambda_t lambda;
-	struct array args;
+	int argct;
+	object_t* args;
 };
 
 void thunk_dispose(void* obj)
 {
 	thunk_t thunk = obj;
-	array_dispose(&thunk->args);
-	reclaim(obj);
+	free(thunk->args);
 }
 
 void thunk_reach(void* obj)
 {
 	thunk_t thunk = obj;
 	mark_reachable(thunk->lambda);
-	for (int i=thunk->args.size-1; i>=0; i--)
-		mark_reachable(thunk->args.data[i]);
+	for (int i=thunk->argct-1; i>=0; i--)
+		mark_reachable(thunk->args[i]);
 }
 
 struct type THUNK = {
 	.name = "thunk",
-	.size = sizeof(struct thunk),
+	// .size = sizeof(struct thunk),
 	.reach = thunk_reach,
 	.dispose = thunk_dispose,
 };
-
-object_t make_thunk(lambda_t lambda, array_t args)
-{
-	thunk_t thunk = allocate_object(&THUNK);
-	thunk->lambda = lambda;
-	thunk->args = *args;
-	object_t result = object_init(thunk, &THUNK);
-	array_decref(args);
-	return result;
-}
 
 thunk_t to_thunk(object_t obj)
 {
 	if (obj->type == &THUNK)
 		return (thunk_t)obj;
 	return NULL;
-}
-
-//
-
-struct native;
-typedef struct native* native_t;
-
-native_t to_native(object_t);
-
-object_t invoke_lambda(lambda_t, int, object_t*);
-object_t invoke_native(native_t, int, object_t*);
-
-object_t invoke(object_t func, int argct, object_t* args)
-{
-	native_t native;
-	lambda_t lambda;
-	object_t result;
-
-	if ((native = to_native(func))) {
-		result = invoke_native(native, argct, args);
-	} else if ((lambda = to_lambda(func))) {
-		result = invoke_lambda(lambda, argct, args);
-	} else {
-		DIE("Can't invoke object of type %s", typename(func));
-	}
-	decref_many(argct, args);
-	return result;
-}
-
-//
-
-object_t eval_thunk(thunk_t thunk)
-{
-	return invoke_lambda(thunk->lambda, thunk->args.size, (object_t*)thunk->args.data);
-}
-
-//
-
-void gc_register(struct object* obj)
-{
-	static int threshold = 256;
-	array_push(&ALL_OBJECTS, obj);
-	if (ALL_OBJECTS.size > threshold) {
-		collect_garbage();
-		threshold = ALL_OBJECTS.size * 2;
-	}
 }
 
 //
@@ -1966,27 +2024,27 @@ void scope_dispose(void* obj)
 {
 	scope_t scope = obj;
 	dict_dispose(&scope->s_binds);
-	if (scope->s_parent)
-		reclaim(obj);
 }
 
 struct type SCOPE = {
 	.name = "scope",
-	.size = sizeof(struct scope),
+	// .size = sizeof(struct scope),
 	.reach = scope_reach,
 	.dispose = scope_dispose,
 };
 
-struct scope DEFAULT_SCOPE;
+scope_t REPL_SCOPE = NULL;
 
-scope_t default_scope()
+object_t derive_scope(scope_t parent);
+
+scope_t get_repl_scope()
 {
-	return &DEFAULT_SCOPE;
+	return REPL_SCOPE;
 }
 
 //
 
-void scope_bind(scope_t scope, symbol_t key, object_t value)
+void bind_in_scope(scope_t scope, symbol_t key, object_t value)
 {
 	const char* strkey = unwrap_symbol(key);
 	void* ptr = dict_put(&scope->s_binds, key, value);
@@ -2006,8 +2064,18 @@ void eval_define(scope_t eval_scope, scope_t bind_scope, symbol_t key, object_t 
 	if (lambda)
 		lambda->l_name = key;
 
-	scope_bind(bind_scope, key, result);
+	bind_in_scope(bind_scope, key, result);
 	decref(result);
+}
+
+void assign_name(object_t obj, symbol_t name)
+{
+	lambda_t lambda = to_lambda(obj);
+	if (lambda) {
+		if (! lambda->l_name)
+			lambda->l_name = name;
+		return;
+	}
 }
 
 //
@@ -2021,36 +2089,14 @@ struct type TYPE_NATIVE = {
 	.name = "native",
 };
 
-native_t to_native(object_t obj)
-{
-	if (obj->type == &TYPE_NATIVE)
-		return (native_t)obj;
-	return NULL;
-}
-
-//
-
-object_t invoke_native(native_t native, int argct, object_t* args)
-{
-	return native->invoke(argct, args);
-}
-
-//
-
-void scope_init(scope_t scope, scope_t parent)
-{
-	dict_init(&scope->s_binds);
-	scope->s_parent = parent;
-	object_init(&scope->self, &SCOPE);
-}
-
 //
 
 object_t derive_scope(scope_t parent)
 {
-	scope_t scope = allocate_object(&SCOPE);
-	scope_init(scope, parent);
-	return (object_t)scope;
+	scope_t scope = malloc(sizeof(*scope));
+	dict_init(&scope->s_binds);
+	scope->s_parent = parent;
+	return register_object(scope, &SCOPE);
 }
 
 //
@@ -2069,7 +2115,7 @@ object_t eval_block(scope_t scope, object_t code)
 	object_t result = wrap_nil(), expr;
 
 	while ((expr = pop_list(&code))) {
-		result = eval_force(result);
+		result = force(result);
 		decref(result);
 		result = eval_lazy(scope, expr);
 	}
@@ -2090,7 +2136,7 @@ object_t invoke_lambda(struct lambda* lambda, int argct, object_t* args)
 	scope_t scope = to_scope(scope_obj);
 
 	for (int i=0; i<params->size; i++)
-		scope_bind(scope, params->data[i], args[i]);
+		bind_in_scope(scope, params->data[i], args[i]);
 	object_t result = eval_block(scope, lambda->l_body);
 
 	decref(scope_obj);
@@ -2099,15 +2145,16 @@ object_t invoke_lambda(struct lambda* lambda, int argct, object_t* args)
 
 //
 
+void register_stdlib_syntax(void);
 void register_stdlib_functions(void);
 
 void setup_runtime()
 {
 	dict_init(&ALL_SYMBOLS);
-	array_init(&ALL_OBJECTS);
-	dict_init(&SYNTAX_HANDLERS);
-	setup_syntax();
-	scope_init(&DEFAULT_SCOPE, NULL);
+	init_array(&ALL_OBJECTS);
+	init_array(&REACHABLE_OBJECTS);
+	REPL_SCOPE = (scope_t)derive_scope(NULL);
+	register_stdlib_syntax();
 	register_stdlib_functions();
 	execute_file("stdlib.scm");
 }
@@ -2125,18 +2172,25 @@ void dict_decref(struct dict* d)
 
 void teardown_runtime()
 {
-	dict_decref(&DEFAULT_SCOPE.s_binds);
-	scope_dispose(&DEFAULT_SCOPE);
+	dict_decref(&REPL_SCOPE->s_binds);
+	// scope_dispose(REPL_SCOPE);
+	decref(&REPL_SCOPE->self);
 	dict_decref(&ALL_SYMBOLS);
 	dict_dispose(&ALL_SYMBOLS);
-	teardown_syntax();
 	collect_garbage();
-	array_dispose(&ALL_OBJECTS);
-	dispose_object_pools();
-	dispose_array_pool();
+	reclaim_array(&ALL_OBJECTS);
+	reclaim_array(&REACHABLE_OBJECTS);
 }
 
 //
+
+object_t pop_list_or_die(object_t* ptr)
+{
+	object_t result = pop_list(ptr);
+	if (! result)
+		DIE("Premature end of list");
+	return result;
+}
 
 object_t syntax_quote(scope_t scope, object_t code)
 {
@@ -2146,36 +2200,6 @@ object_t syntax_quote(scope_t scope, object_t code)
 }
 
 //
-
-void register_native(const char* name, object_t (*func)(int, object_t*))
-{
-	native_t native = malloc(sizeof(struct native));
-	native->invoke = func;
-
-	object_t obj = object_init(native, &TYPE_NATIVE);
-	object_t key = wrap_symbol(name);
-	scope_bind(&DEFAULT_SCOPE, (symbol_t)key, obj);
-	decref(obj);
-	decref(key);
-}
-
-//
-
-object_t native_write(int argct, object_t* args)
-{
-	assert_arg_count("write", argct, 1);
-	write_object(stdout, args[0]);
-	return wrap_nil();
-}
-
-//
-
-object_t native_newline(int argct, object_t* args)
-{
-	assert_arg_count("newline", argct, 0);
-	fputs("\n", stdout);
-	return wrap_nil();
-}
 
 bool unbox_int(int*, object_t);
 
@@ -2431,7 +2455,7 @@ object_t syntax_lambda(scope_t scope, object_t code)
 {
 	pair_t pair = to_pair(code);
 	assert(pair);
-	return lambda(scope, car(pair), cdr(pair));
+	return wrap_lambda(scope, car(pair), cdr(pair));
 }
 
 bool unbox_int(int* ptr, object_t obj)
@@ -2443,16 +2467,6 @@ bool unbox_int(int* ptr, object_t obj)
 	return true;
 }
 
-void reset_gc_state(object_t obj)
-{
-	if (obj->stackrefs == 0) {
-		obj->gc_state = GARBAGE;
-	} else {
-		obj->gc_state = REACHABLE;
-		array_push(&REACHABLE_OBJECTS, obj);
-	}
-}
-
 void mark_reachable(void* ptr)
 {
 	if (! ptr)
@@ -2461,7 +2475,7 @@ void mark_reachable(void* ptr)
 	object_t obj = ptr;
 	if (obj->gc_state == GARBAGE) {
 		obj->gc_state = REACHABLE;
-		array_push(&REACHABLE_OBJECTS, obj);
+		push_array(&REACHABLE_OBJECTS, obj);
 	}
 }
 
@@ -2527,7 +2541,6 @@ void dispose_file(void* obj)
 {
 	file_t file = obj;
 	fclose(file->value);
-	free(obj);
 }
 
 struct type TYPE_FILE = {
@@ -2537,9 +2550,9 @@ struct type TYPE_FILE = {
 
 struct object* wrap_file(FILE* v)
 {
-	file_t file = malloc(sizeof(struct file));
+	file_t file = malloc(sizeof(*file));
 	file->value = v;
-	return object_init(file, &TYPE_FILE);
+	return register_object(file, &TYPE_FILE);
 }
 
 object_t native_open_input_file(int argct, object_t* args) // open-input-file
@@ -2592,15 +2605,15 @@ void write_char(FILE* out, void* obj)
 
 struct type TYPE_CHAR = {
 	.name = "character",
-	.size = sizeof(struct character),
+	// .size = sizeof(struct character),
 	.write = write_char
 };
 
 struct object* wrap_char(char v)
 {
-	char_t ch = allocate_object(&TYPE_CHAR);
+	char_t ch = malloc(sizeof(*ch));
 	ch->value = v;
-	return object_init(ch, &TYPE_CHAR);
+	return register_object(ch, &TYPE_CHAR);
 }
 
 object_t native_read_char(int argct, object_t* args) // read-char
@@ -2763,19 +2776,20 @@ object_t native_not(int argct, object_t* args)
 
 object_t native_display(int argct, object_t* args)
 {
-	assert_arg_count("display", argct, 1);
-	string_t str = to_string(args[0]);
-	if (str)
-		printf("%s", str->value);
-	else
-		write_object(stdout, args[0]);
+	for (int i=0; i<argct; i++) {
+		string_t str = to_string(args[i]);
+		if (str) {
+			printf("%s", str->value);
+			continue;
+		}
+		char_t ch = to_char(args[i]);
+		if (ch) {
+			printf("%c", ch->value);
+			continue;
+		}
+		write_object(stdout, args[i]);
+	}
 	return wrap_nil();
-}
-
-syntax_t lookup_syntax_handler(symbol_t name)
-{
-	const char* key = unwrap_symbol(name);
-	return dict_lookup_fast(&SYNTAX_HANDLERS, key, name->hash);
 }
 
 void* dict_put(struct dict* dict, symbol_t sym, void* value)
@@ -2816,11 +2830,11 @@ void* dict_put(struct dict* dict, symbol_t sym, void* value)
 
 int compare_entry(struct dict_entry* entry, int hash, const char* key)
 {
-	if (entry->key->hash == hash) {
-		return strcmp(entry->key->value, key);
-	} else {
-		return entry->key->hash - hash;
-	}
+	if (entry->key->hash < hash)
+		return -1;
+	if (entry->key->hash > hash)
+		return 1;
+	return strcmp(entry->key->value, key);
 }
 
 void dict_reinsert(struct dict* dict, struct dict_entry* entry)
@@ -2839,7 +2853,8 @@ void dict_reinsert(struct dict* dict, struct dict_entry* entry)
 		if (diff < 0) {
 			index = (index + 1) % dict->size;
 		} else if (diff == 0) {
-			DIE("Should never happen");
+			DEBUG("value", entry->value);
+			DIE("Should never happen : %s vs %s", cell->key->value, entry->key->value);
 		} else {
 			struct dict_entry tmp = *cell;
 			*cell = *entry;
@@ -2900,54 +2915,159 @@ object_t reverse(object_t list)
 
 	return result;
 }
-void setup_syntax(void)
+
+//
+
+struct native;
+typedef struct native* native_t;
+
+native_t to_native(object_t);
+
+object_t invoke_lambda(lambda_t, int, object_t*);
+object_t invoke_native(native_t, int, object_t*);
+
+void decref_many(int argct, object_t* args);
+
+object_t invoke(object_t func, int argct, object_t* args)
 {
-	register_syntax_handler("and", syntax_and);
-	register_syntax_handler("cond", syntax_cond);
-	register_syntax_handler("define", syntax_define);
-	register_syntax_handler("if", syntax_if);
-	register_syntax_handler("lambda", syntax_lambda);
-	register_syntax_handler("let", syntax_let);
-	register_syntax_handler("let*", syntax_letseq);
-	register_syntax_handler("letrec", syntax_letrec);
-	register_syntax_handler("or", syntax_or);
-	register_syntax_handler("quote", syntax_quote);
-	register_syntax_handler("set!", syntax_set);
+	native_t native;
+	lambda_t lambda;
+	object_t result;
+
+	if ((native = to_native(func))) {
+		result = invoke_native(native, argct, args);
+	} else if ((lambda = to_lambda(func))) {
+		result = invoke_lambda(lambda, argct, args);
+	} else {
+		DIE("Can't invoke object of type %s", typename(func));
+	}
+	decref_many(argct, args);
+	return result;
 }
 
-void register_stdlib_functions(void)
+//
+
+void decref_many(int argct, object_t* args)
 {
-	register_native("*", native_num_mult);
-	register_native("+", native_num_plus);
-	register_native("-", native_num_minus);
-	register_native("/", native_num_divide);
-	register_native("<", native_num_less);
-	register_native("=", native_num_equals);
-	register_native("car", native_car);
-	register_native("cdr", native_cdr);
-	register_native("cons", native_cons);
-	register_native("display", native_display);
-	register_native("eq?", native_eqp);
-	register_native("fold", native_fold);
-	register_native("list", native_list);
-	register_native("list->string", native_list_to_string);
-	register_native("modulo", native_modulo);
-	register_native("newline", native_newline);
-	register_native("not", native_not);
-	register_native("null?", native_nullp);
-	register_native("open-input-file", native_open_input_file);
-	register_native("pair?", native_pairp);
-	register_native("read-char", native_read_char);
-	register_native("reverse", native_reverse);
-	register_native("set-cdr!", native_setcdr);
-	register_native("string->list", native_string_to_list);
-	register_native("string-append", native_string_append);
-	register_native("string-copy", native_string_copy);
-	register_native("string-length", native_string_length);
-	register_native("string-ref", native_string_ref);
-	register_native("string-set!", native_string_set);
-	register_native("string=?", native_string_equal);
-	register_native("substring", native_substring);
-	register_native("symbol?", native_symbolp);
-	register_native("write", native_write);
+	for (int i=argct-1; i>=0; i--)
+		decref(args[i]);
+}
+void array_decref(array_t arr)
+{
+	decref_many(arr->size, (object_t*)arr->data);
+}
+
+object_t wrap_thunk(lambda_t lambda, int argct, object_t* args)
+{
+	thunk_t thunk = malloc(sizeof(*thunk));
+
+	size_t sz = argct * sizeof(object_t);
+	thunk->lambda = lambda;
+	thunk->argct = argct;
+	thunk->args = malloc(sz);
+	memcpy(thunk->args, args, sz);
+	decref_many(argct, args);
+
+	return register_object(thunk, &THUNK);
+}
+
+object_t eval_thunk(thunk_t thunk)
+{
+	return invoke_lambda(thunk->lambda, thunk->argct, thunk->args);
+}
+native_t to_native(object_t obj)
+{
+	if (obj->type == &TYPE_NATIVE)
+		return (native_t)obj;
+	return NULL;
+}
+object_t invoke_native(native_t native, int argct, object_t* args)
+{
+	return native->invoke(argct, args);
+}
+void register_native(const char* name, object_t (*func)(int, object_t*))
+{
+	object_t key = wrap_symbol(name);
+
+	native_t native = malloc(sizeof(*native));
+	native->invoke = func;
+	object_t obj = register_object(native, &TYPE_NATIVE);
+
+	bind_in_scope(REPL_SCOPE, (symbol_t)key, obj);
+	decref(obj);
+	decref(key);
+}
+
+void dict_enlarge(struct dict* d)
+{
+	if (d->size == 0) {
+		d->data = calloc(sizeof(struct dict_entry), 8);
+		d->size = 8;
+		return;
+	}
+
+	struct dict old = *d;
+	d->used = 0;
+	d->size *= 2;
+	d->data = calloc(sizeof(struct dict_entry), d->size);
+
+	for (int i=0; i<old.size; i++) {
+		struct dict_entry* entry = &old.data[i];
+		if (entry->key)
+			dict_reinsert(d, entry);
+	}
+	free(old.data);
+	// d->size = tmp.size;
+	// d->data = tmp.data;
+}
+
+syntax_t to_syntax(object_t obj)
+{
+	if (obj->type == &TYPE_SYNTAX)
+		return (syntax_t)obj;
+	return NULL;
+}
+
+typedef struct macro* macro_t;
+
+macro_t to_macro(object_t);
+object_t eval_macro(scope_t scope, macro_t macro, object_t body);
+
+object_t eval_syntax(scope_t scope, object_t head, object_t body)
+{
+	syntax_t syntax = to_syntax(head);
+	if (syntax)
+		return syntax->eval(scope, body);
+
+	macro_t macro = to_macro(head);
+	if (macro)
+		return eval_macro(scope, macro, body);
+
+	return NULL;
+}
+
+//
+
+void register_syntax(const char* name, object_t (*func)(scope_t, object_t))
+{
+	object_t key = wrap_symbol(name);
+
+	syntax_t syntax = malloc(sizeof(struct syntax));
+	syntax->eval = func;
+	object_t obj = register_object(syntax, &TYPE_SYNTAX);
+
+	bind_in_scope(REPL_SCOPE, (symbol_t)key, obj);
+
+	decref(obj);
+	decref(key);
+}
+
+macro_t to_macro(object_t obj)
+{
+	return NULL;
+}
+
+object_t eval_macro(scope_t scope, macro_t macro, object_t body)
+{
+	DIE("Not implemented");
 }

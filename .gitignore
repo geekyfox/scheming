@@ -6,4 +6,5 @@ scheme
 temp/*
 callgrind.out.*
 profile.txt
+gaps
 

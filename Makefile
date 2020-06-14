@@ -1,28 +1,40 @@
+CC = gcc
+CFLAGS = -Wall -g
+
 .PHONY: test
 test: scheme pro99.scm stdlib.scm
 	@mkdir -p temp
 	./scheme pro99.scm > temp/output
 	diff temp/output test/pro99.out
 
-.PHONY: all
-all: codegen test README.md
+.PHONY: sync
+sync: all
+	git add .
+	git commit -m 'Tweaks'
+	git push origin wip
 
-.PHONY: codegen
-codegen:
-	@mkdir -p temp
-	cat scheme.c | scripts/codegen.rb > temp/scheme.c
-	mv temp/scheme.c scheme.c
+.PHONY: all
+all: format test README.md
 
 .PHONY: clean
 clean:
 	rm -f scheme
 	rm -rf temp
 
+.PHONY: format
+format:
+	cat scheme.c | scripts/fmt.rb > temp/scheme.c
+	mv temp/scheme.c scheme.c
+
 CC = gcc
 CFLAGS = -Wall -g
 
-scheme : scheme.c
-	$(CC) $(CFLAGS) $< -o $@
+scheme : scheme.c temp/autogen.c
+	$(CC) $(CFLAGS) $^ -o $@
+
+temp/autogen.c : scheme.c
+	@mkdir -p temp
+	cat $^ | scripts/codegen.rb > $@
 
 .PHONY: cut
 cut: temp/cut
@@ -30,15 +42,13 @@ cut: temp/cut
 temp/cut : temp/cut.c
 	$(CC) $(CFLAGS) $< -o $@
 
-.PHONY: gaps 
-gaps: temp/gaps.txt
-
-temp/gaps.txt : temp/cut.c
-	make cut 2>&1 | grep undefined | awk '{print $$NF}' | sort -u | tee $@
-
 temp/cut.c : scheme.c
 	@mkdir -p temp
-	cat $< | scripts/cut.rb | scripts/codegen.rb > $@
+	cat $< | scripts/cut.rb > $@
+	cat $@ | scripts/codegen.rb >> $@
+
+gaps: temp/cut.c
+	make cut 2>&1 | grep undefined | awk '{print $$NF}' | sort -u | tee $@
 
 README.md : scheme.c
 	cat $< | scripts/cut.rb | scripts/markdown.rb > $@

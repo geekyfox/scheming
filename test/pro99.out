@@ -19,6 +19,7 @@ c
 (c d e f g)
 (d e f g h a b c)
 (g h a b c d e f)
+(a c d)
 #t
 #f
 9
