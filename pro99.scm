@@ -8,9 +8,6 @@
 (newline)
 
 ; problem #2
-(define (cddr x)
-	(cdr (cdr x)))
-
 (define (my-but-last x)
 	(if (null? (cddr x))
 		x

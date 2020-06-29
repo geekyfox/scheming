@@ -7,14 +7,8 @@ STDIN.each_line do |line|
   m = line.match(%r{^object_t (syntax_.+)\(.+\) // (\S+)$})
   syntax_to_func[m.captures[1]] = m.captures[0] if m
 
-  m = line.match(/^object_t syntax_(.+)\(.+\)$/)
-  syntax_to_func[m.captures[0]] = 'syntax_' + m.captures[0] if m
-
   m = line.match(%r{^object_t (native_.+)\(.+\) // (\S+)$})
   native_to_func[m.captures[1]] = m.captures[0] if m
-
-  m = line.match(/^object_t native_(.+)\(.+\)$/)
-  native_to_func[m.captures[0]] = 'native_' + m.captures[0] if m
 end
 
 puts "typedef struct object* object_t;"

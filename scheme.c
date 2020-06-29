@@ -797,6 +797,7 @@ object_t read_quote(FILE* in)
 // is trivial, and with that in place we're finally done with parsing
 // and can move on to
 // ## Chapter 3 where I evaluate
+//
 // By the way, I don't know if you noticed or not, but I try to use the
 // word "we" as sparingly as I can. Perhaps it has something to do with me
 // coming from a culture where "We" is commonly associated with the
@@ -1047,7 +1048,7 @@ object_t eval_sexpr(scope_t scope, object_t head, object_t body)
 //
 // Moreover, even though they behave differently, it's not that *that
 // dissimilar* either. `+` and `cons` are simply functions that accept
-// *values* of `foo` and `bar`and do something with them. Whereas
+// *values* of `foo` and `bar` and do something with them. Whereas
 // `if` is also simply a function, except that instead of values of its'
 // arguments it accepts *a chunk of code verbatim.*
 //
@@ -1121,15 +1122,59 @@ object_t eval_funcall(scope_t scope, object_t func, object_t exprs)
 // at 64. I even drafted a rant to rationalize that, but I'm running out of
 // Chardonnay, so let's park it for now and move on to
 // ## Chapter 4 where I finally write some code in Scheme
-// CUTOFF
+//
+// Somewhere around Chapter 2 I mentioned that this whole story
+// began with the list of "99 Lisp problems."
+//
+// So, let's start with the first task on the list, which is:
+//
+// > Find the last box of a list.
+// >
+// > Example:
+// >
+// > `* (my-last '(a b c d))`
+// >
+// > `(D)`
+//
+// That's an easy puzzle, here's the solution:
+//
 // embed pro99.scm : problem #1
 //
+// Lists of problems like that one, where you start with something very
+// simple, and then work your way towards something more complex is
+// an awesome way to learn a programming language. I mean, you start
+// at level 1, and you figure out the least sufficient fraction of the
+// language that enables you to write a simple yet complete and
+// self-contained program. Once that knowledge sinks in, you move on to
+// level 2, and learn a bit more, and in the end you have a pretty good
+// command of the whole thing.
+//
+// At least this is how it works for me. If there are anybody out there,
+// who needs to memorize the whole language standard and pass theory
+// exams before they can start writing any code, that's fine, I don't
+// judge.
+//
+// Oh, and of course it only applies when I'm in a relatively unfamiliar
+// territory. If you ask me, after all those years I spent writing backends
+// in Python and Java, to do some, I dunno, Node.js, I'd be like "Hmm,
+// so you guys use curly braces here? That's neat." and then just pick a
+// real problem straight away.
+//
+// But also, and maybe even more so, I find it an awesome way to
+// *implement* a language. So, instead of spending months and
+// months to build a whole standards-compliant thing, just make
+// something that enables that little self-contained program to run,
+// and then iterate from there.
+//
+// That said. To get that little function above running I'm gonna need
+// two syntax constructs, namely `define` and `if`. And I'm also gonna
+// need four standard library functions which are `null?`, `cdr`,
+// `write` and `newline`.
+//
+// Let's start with `null?`
+//
 
-void assert_arg_count(const char* name, int actual, int expected)
-{
-	if (actual != expected)
-		DIE("Expected %d arguments for %s, got %d", expected, name, actual);
-}
+void assert_arg_count(const char* name, int actual, int expected);
 
 object_t native_nullp(int argct, object_t* args) // null?
 {
@@ -1138,114 +1183,330 @@ object_t native_nullp(int argct, object_t* args) // null?
 }
 
 //
-
-void register_native(const char* name, object_t (*func)(int, object_t*));
-
+// Functional part of this function is fairly trivial: I've defined
+// `wrap_bool()` and `is_nil()` earlier, and now I just use them here.
+//
+// Code that surrounds that logic needs some clarifications though.
+//
+// One thing is passing arguments as an array and not... Well, it's
+// a bloody good question what else can you do here.
+//
+// See, in Scheme:
+// * some functions accept a fixed number of arguments (e.g. `car`
+// accepts exactly one and `cons` accepts exactly two)
+// * some functions accept a variable number of arguments (like `write`
+// that we'll get to in a bit which can have one or two)
+// * and some functions accept an arbitrary number of arguments
+// (like `list` that can have as many arguments as you give it)
+//
+// Oh, and the host language is still good ol' C, so you can have as
+// much run-time metadata attached to a function as you want. For as
+// long as you can figure out a way to do it all yourself.
+//
+// That's why the most sane interface I could come up with is to
+// simply pass an array of arguments, and then let the function itself
+// figure out if it's happy with what it got, or if it isn't. Which is
+// exactly what I'm doing here.
+//
+// The other thing that needs explanation is that little `// null?`
+// comment. Why it is there is because I need this function to
+// eventually end up in REPL scope, which means I'll have to have a
+// registration function that will put it there. But I'm also not eager to
+// maintain it manually, so I'm going to put together a little script that
+// scans the source file and generates the code for me.
+//
+// Well, and since Scheme has more valid characters for identifiers
+// than C does, I can't simply name this function `native_null?`, hence
+// I have to provide the Scheme name separately, and this is the purpose
+// of that little comment.
+//
+// Okay, now let's do `cdr`
 //
 
-object_t native_car(int argct, object_t* args)
-{
-	assert_arg_count("car", argct, 1);
-	pair_t pair = assert_pair("as argument #1 of car", args[0]);
-	object_t result = car(pair);
-	incref(result);
-	return result;
-}
-
-object_t native_cdr(int argct, object_t* args)
+object_t native_cdr(int argct, object_t* args) // cdr
 {
 	assert_arg_count("cdr", argct, 1);
-	pair_t pair = assert_pair("as argument #1 of cdr", args[0]);
+	pair_t pair = assert_pair("as an argument #1 of cdr", args[0]);
 	object_t result = cdr(pair);
 	incref(result);
 	return result;
 }
 
 //
+// With all gotchas already explained, this code is so straightforward
+// that I don't want to talk about it.
+//
+// Instead I want to talk about sports. My favourite kind of physical
+// activity is long-distance running. *Really* long distance running.
+// Which means, marathons.
+//
+// Now, as we all know, some things are easy, and some are hard.
+// Also, some things are simple, and some are complex. And also, there's
+// a belief among certain people from Nerd and Nerdish tribes that
+// simple things must be easy, and that hard things must be complex.
+//
+// I admit I had few too many White Zinfandels on my way here, so
+// you'll have to endure me rambling all over the place. That said.
+// Nerd tribe is a well established notion, so I'm not gonna explain
+// what it is. While Nerdish tribe is a certain type of people who were
+// taught that being smart is kinda cool, but weren't taught how to be
+// properly smart. So they just keep pounding you with their erudition
+// and intellect, even if situation is such that a properly smart thing
+// to do would be to just shut the fuck up.
+//
+// Anyway. Marathons prove that belief to be wrong. Conceptually,
+// running a marathon is very **simple**: you just put one foot in front
+// of the other, and that's pretty much it. But sheer amount of how
+// many times you should do that to complete a 42.2 kilometer distance is
+// what makes a marathon pretty **hard**, and dealing with that hardness
+// is what makes it more complex than it seems.
+//
+// In fact, there's a whole bunch of stuff that come into play: physical
+// training regimen, mental prep, choice of gear, diet, rhythm, pace,
+// handling of weather conditions, even choice of music for the playlist.
+//
+// In broad terms, options I choose fall into three categories:
+//
+// 1. Stuff that works **for me**. It has never been perfect, but if
+// I generally get it right, then by 38th kilometer I'm enjoying
+// myself, and singing along to whatever Russian punk rock I've got
+// in my headphones, and looking forward to a medal and a beer.
+//
+// 2. Stuff that doesn't work for me. If there's too much of that, then
+// by 38th kilometer I'm lying on the tarmac and hope that race
+// organizers have a gun to end my suffering.
+//
+// 3. Stuff that I really really want to work because it looks so
+// awesome in theory, **but it still doesn't**, so in the end it's
+// still lying on the tarmac and praying for a quick death.
+//
+// As a matter of fact, doing marathons really helped me to
+// crystallize my views on engineering: if an idea looks really great
+// on paper, but hasn't been tested in battle, then, well, you know,
+// it looks really great. On paper.
+//
+// Okay, while we're at it, let's also do `car`
+//
 
-object_t native_write(int argct, object_t* args)
+object_t native_car(int argct, object_t* args) // car
 {
-	assert_arg_count("write", argct, 1);
-	write_object(stdout, args[0]);
+	assert_arg_count("car", argct, 1);
+	pair_t pair = assert_pair("as an argument #1 of car", args[0]);
+	object_t result = car(pair);
+	incref(result);
+	return result;
+}
+
+//
+// This function is as straightforward as the previous one, so I don't
+// want to talk about it either. Instead I want to talk about philosophy.
+//
+// Quite a few times in this story I said "there are three ways to do
+// it / three options to choose from / three categories it falls
+// into." And it's not just my personal gimmick with number 3, but
+// in fact it's Hegelian(-ish) dialectic.
+//
+// Just to be clear, I'm not nearly as good at philosophy as I am at
+// programming, and you can see how mediocre my code is. With that
+// in mind, the best way I can explain it is this.
+//
+// Imagine you've been told that the language you can use in an
+// upcoming project can be either Java or Ancient Greek. And you're,
+// like, wait a minute, but how can I choose between Java and Ancient
+// Greek?
+//
+// This is a perfectly valid question. But we're going to take one step
+// deeper and look into why it's perfectly valid. And, well, it's because
+// while both Java and Ancient Greek are languages, there's otherwise
+// not much common between them, and that's why there's no readily
+// available frame of reference in which they can be compared.
+//
+// And what it means is that you can only compare things that are
+// sufficiently similar or else you simply can't define criteria for such
+// comparison.
+//
+// This idea sounds obscenely trivial (like most philosophy does after
+// stripping out all the smartass fluff), but it's immensly powerful.
+//
+// One way to practically apply this idea is: when choosing between
+// multiple options don't jump immediately into the differences between
+// them, but instead start with challenging the commonalities.
+//
+// Say you're deciding whether to build an application with Django or
+// with Rails. Both are rich web frameworks that utilize dynamically-typed
+// languages. Which means you implicitly excluded:
+//
+// * statically typed languages (Java, Go, Kotlin, ...)
+//
+// * micro-frameworks (Flask, Express, ...)
+//
+// * non-web applications (desktop, mobile, CLI, ...)
+//
+// * using an off-the-shelf solution instead of building your own
+//
+// Do you agree with all these choices? If yes, great, go ahead with your
+// Django versus Rails analysis. If no, well, you might have just saved
+// yourself from putting a lot of effort into a wrong thing.
+//
+// More advanced method is this:
+//
+// 1. Start with some idea.
+//
+// 2. Design an alternative idea that is different from the first one in
+// every way you could think of.
+//
+// 3. Look at two options at hand and find the similarities between them
+// **that you didn't even think about,** those are your blind spots.
+//
+// 4. Come up with a synthetic idea that takes your newly found blind
+// spots into account.
+//
+// 5. Repeat until you run out of blind spots and cover entire decision
+// space for the problem you're solving.
+//
+// Just try it out and you'll see how powerful these techniques are.
+//
+// Okay, enough philosophy, let's get back to coding and do some I/O.
+//
+
+struct port;
+typedef struct port* port_t;
+
+void assert_vararg_count(const char* name, int actual, int least, int most);
+port_t assert_port(const char* context, object_t obj);
+FILE* unwrap_port(port_t);
+
+object_t native_write(int argct, object_t* args) // write
+{
+	assert_vararg_count("write", argct, 1, 2);
+	FILE* out = (argct == 1)
+		? stdout
+		: unwrap_port(assert_port("as an argument #2 of write", args[1]));
+	write_object(out, args[0]);
 	return wrap_nil();
 }
 
 //
+// Nothing particularly spectacular here. "Port" is how they call a stream
+// (or a file handler or what have you) in Scheme. Oh, and also it can
+// accept one or two arguments. Aside from that it's all straightforward.
+//
 
-object_t native_newline(int argct, object_t* args)
+object_t native_newline(int argct, object_t* args) // newline
 {
-	assert_arg_count("newline", argct, 0);
-	fputs("\n", stdout);
+	assert_vararg_count("newline", argct, 0, 1);
+	FILE* out = (argct == 0)
+		? stdout
+		: unwrap_port(assert_port("as an argument #2 of newline", args[0]));
+	fputs("\n", out);
 	return wrap_nil();
 }
 
 //
+// So is this one. Now I'll do something more complex and evaluate syntax
+// for `if`
+//
+
+#define ASSERT(expr, fmt, ...) do { \
+	if (! (expr)) \
+		DIE(fmt, ##__VA_ARGS__); \
+} while(0)
 
 bool eval_boolean(scope_t scope, object_t expr);
 
-object_t syntax_if(scope_t scope, object_t code)
+object_t syntax_if(scope_t scope, object_t code) // if
 {
 	object_t test = pop_list(&code);
-	if (! test)
-		DIE("`if` without <test> part");
+	ASSERT(test, "`if` without <test> part");
 
 	object_t consequent = pop_list(&code);
-	if (! consequent)
-		DIE("`if` without <consequent> part");
+	ASSERT(consequent, "`if` without <consequent> part");
+
+	object_t alternate = pop_list(&code);
+	ASSERT(is_nil(code), "Malformed `if`");
 
 	if (eval_boolean(scope, test))
 		return eval_lazy(scope, consequent);
-
-	object_t alternate = pop_list(&code);
-	if (alternate)
+	else if (alternate)
 		return eval_lazy(scope, alternate);
+	else
+		return wrap_nil();
+}
 
+//
+// A tiny bit more complex really. See, when code you interpret is in a
+// common convenient data structure, it really takes effort and
+// determination to make things hard. And although I (obviously) have
+// a rant on this topic, I think I put enough random ramblings into this
+// chapter already, so I'm going to park it for now and instead evaluate
+// `define`
+//
+
+symbol_t assert_symbol(const char* context, object_t);
+
+void define(scope_t, symbol_t key, object_t value);
+object_t wrap_lambda(scope_t, object_t formals, object_t code);
+
+object_t syntax_define(scope_t scope, object_t code) // define
+{
+	object_t head = pop_list(&code);
+	ASSERT(head, "Malformed `define`");
+
+	symbol_t key;
+	object_t value;
+	pair_t key_params;
+
+	if ((key = to_symbol(head))) {
+		object_t expr = pop_list(&code);
+		ASSERT(expr, "`define` block without <expression>");
+		ASSERT(is_nil(code), "Malformed `define`");
+		value = eval_eager(scope, expr);
+	} else if ((key_params = to_pair(head))) {
+		key = assert_symbol("variable name in `define`", car(key_params));
+		value = wrap_lambda(scope, cdr(key_params), code);
+	} else {
+		DEBUG("head", head);
+		DIE("Malformed `define`");
+	}
+
+	define(scope, key, value);
+	decref(value);
 	return wrap_nil();
 }
 
 //
+// This one is a little bit trickier, but that's just because Scheme has
+// alternative form for `define` so that `(define (foo bar) bla bla)` is
+// equivalent to `(define foo (lambda (bar) bla bla))`, and I have to
+// handle both cases.
+//
+// Now, I promised to make a handful of simple helpers, so I'm
+// just going to do it to get them out of the way.
+//
 
-symbol_t assert_symbol(const char* context, object_t);
-void assign_name(object_t, symbol_t);
-void bind_in_scope(scope_t, symbol_t, object_t);
-object_t wrap_lambda(scope_t, object_t, object_t);
-
-object_t syntax_define(scope_t scope, object_t code)
+void assert_arg_count(const char* name, int actual, int expected)
 {
-	object_t head = pop_list(&code);
-	if (! head)
-		DIE("Malformed `define`");
-
-	pair_t head_pair = to_pair(head);
-	if (head_pair) {
-		object_t name_obj = car(head_pair);
-		symbol_t name = assert_symbol("variable name in `define`", name_obj);
-
-		object_t args = cdr(head_pair);
-		object_t func = wrap_lambda(scope, args, code);
-		assign_name(func, name);
-		bind_in_scope(scope, name, func);
-		decref(func);
-		return wrap_nil();
-	}
-
-	symbol_t variable = to_symbol(head);
-	if (variable) {
-		object_t expr = pop_list(&code);
-		if (! expr)
-			DIE("`define` block without <expression>");
-
-		object_t value = eval_eager(scope, expr);
-		assign_name(value, variable);
-		bind_in_scope(scope, variable, value);
-		decref(value);
-		return wrap_nil();
-	}
-
-	DIE("define is not implemented for %s", typename(head));
+	if (actual != expected)
+		DIE("Expected %d arguments for %s, got %d", expected, name, actual);
 }
 
-//
+void assert_vararg_count(const char* name, int actual, int least, int most)
+{
+	if (actual < least)
+		DIE("Expected at least %d arguments for %s, got %d", least, name, actual);
+	if (actual > most)
+		DIE("Expected at most %d arguments for %s, got %d", most, name, actual);
+}
+
+port_t to_port(object_t);
+
+port_t assert_port(const char* name, object_t obj)
+{
+	port_t port = to_port(obj);
+	if (! port)
+		DIE("Expected port %s, got %s instead", name, typename(obj));
+	return port;
+}
 
 symbol_t assert_symbol(const char* context, object_t obj)
 {
@@ -1255,7 +1516,10 @@ symbol_t assert_symbol(const char* context, object_t obj)
 	DIE("Expected %s to be a symbol, got %s instead", context, typename(obj));
 }
 
-// Chapter Six
+//
+// And this is a good place to wrap up this chapter and move on to
+// ## Chapter 5 where I reinvent the wheel and then collect garbage
+// CUTOFF
 
 struct array {
 	void** data;
@@ -1278,6 +1542,15 @@ void push_array(array_t arr, void* entry)
 		arr->data = realloc(arr->data, sizeof(void*)*arr->available);
 	}
 	arr->data[arr->size++] = entry;
+}
+
+//
+
+void* pop_array(array_t arr)
+{
+	if (arr->size == 0)
+		return NULL;
+   return arr->data[--arr->size];
 }
 
 //
@@ -1339,6 +1612,7 @@ struct type {
 	void (*reach)(void*);
 	void (*dispose)(void*);
 	void (*write)(FILE*, void*);
+	object_t (*invoke)(void*, int, object_t*);
 };
 
 typedef struct type* type_t;
@@ -1519,10 +1793,7 @@ pair_t to_pair(object_t obj)
 
 //
 
-lambda_t to_lambda(object_t);
-
 void eval_args(array_t, scope_t, object_t);
-object_t invoke(object_t func, int argct, object_t* args);
 
 //
 
@@ -1660,13 +1931,6 @@ bool hasrefs(object_t);
 void mark_garbage(object_t);
 
 void reach_object(void*);
-
-void* pop_array(array_t arr)
-{
-	if (arr->size == 0)
-		return NULL;
-   return arr->data[--arr->size];
-}
 
 //
 
@@ -1900,10 +2164,10 @@ symbol_t to_symbol(object_t obj)
 
 struct lambda {
 	struct object self;
-	object_t l_body;
+	object_t body;
 	scope_t l_scope;
 	symbol_t l_name;
-	struct array l_params;
+	struct array params;
 };
 
 typedef struct lambda* lambda_t;
@@ -1911,23 +2175,48 @@ typedef struct lambda* lambda_t;
 void lambda_reach(void* obj)
 {
 	lambda_t lambda = obj;
-	mark_reachable(lambda->l_body);
+	mark_reachable(lambda->body);
 	mark_reachable(lambda->l_scope);
 	mark_reachable(lambda->l_name);
-	for (int i=lambda->l_params.size-1; i>=0; i--)
-		mark_reachable(lambda->l_params.data[i]);
+	for (int i=lambda->params.size-1; i>=0; i--)
+		mark_reachable(lambda->params.data[i]);
 }
 
 void lambda_dispose(void* obj)
 {
 	lambda_t lambda = obj;
-	reclaim_array(&lambda->l_params);
+	reclaim_array(&lambda->params);
+}
+
+object_t invoke_lambda(void* lambda, int argct, object_t* args);
+
+void write_lambda(FILE* out, void* ptr)
+{
+	lambda_t lambda = ptr;
+
+	fputs("(lambda (", out);
+	for (int i=0; i<lambda->params.size; i++) {
+		if (i > 0)
+			fputc(' ', out);
+		write_object(out, lambda->params.data[i]);
+	}
+	fputc(')', out);
+	object_t body = lambda->body, obj;
+
+	while ((obj = pop_list(&body))) {
+		fputc(' ', out);
+		write_object(out, obj);
+	}
+
+	fputc(')', out);
 }
 
 struct type TYPE_LAMBDA = {
 	.name = "lambda",
 	.reach = lambda_reach,
 	.dispose = lambda_dispose,
+	.invoke = invoke_lambda,
+	.write = write_lambda
 };
 
 lambda_t to_lambda(object_t obj)
@@ -1941,14 +2230,14 @@ object_t wrap_lambda(scope_t scope, object_t params, object_t body)
 {
 	lambda_t lambda = malloc(sizeof(*lambda));
 	lambda->l_name = NULL;
-	lambda->l_body = body;
+	lambda->body = body;
 	lambda->l_scope = scope;
-	init_array(&lambda->l_params);
+	init_array(&lambda->params);
 
 	object_t param;
 	while ((param = pop_list(&params))) {
 		assert(to_symbol(param));
-		push_array(&lambda->l_params, param);
+		push_array(&lambda->params, param);
 	}
 
 	return register_object(lambda, &TYPE_LAMBDA);
@@ -2044,14 +2333,17 @@ scope_t get_repl_scope()
 
 //
 
-void bind_in_scope(scope_t scope, symbol_t key, object_t value)
+void assign_name(object_t value, symbol_t key);
+
+void define(scope_t scope, symbol_t key, object_t value)
 {
 	const char* strkey = unwrap_symbol(key);
 	void* ptr = dict_put(&scope->s_binds, key, value);
 	if (ptr != NULL)
-		DIE("Rebind of %s", strkey);
+		DIE("%s is already defined", strkey);
 	if (! scope->s_parent)
 		incref(value);
+	assign_name(value, key);
 }
 
 //
@@ -2059,23 +2351,8 @@ void bind_in_scope(scope_t scope, symbol_t key, object_t value)
 void eval_define(scope_t eval_scope, scope_t bind_scope, symbol_t key, object_t expr)
 {
 	object_t result = eval_eager(eval_scope, expr);
-
-	lambda_t lambda = to_lambda(result);
-	if (lambda)
-		lambda->l_name = key;
-
-	bind_in_scope(bind_scope, key, result);
+	define(bind_scope, key, result);
 	decref(result);
-}
-
-void assign_name(object_t obj, symbol_t name)
-{
-	lambda_t lambda = to_lambda(obj);
-	if (lambda) {
-		if (! lambda->l_name)
-			lambda->l_name = name;
-		return;
-	}
 }
 
 //
@@ -2085,8 +2362,13 @@ struct native {
 	object_t (*invoke)(int, object_t*);
 };
 
+typedef struct native* native_t;
+
+object_t invoke_native(void*, int, object_t*);
+
 struct type TYPE_NATIVE = {
 	.name = "native",
+	.invoke = invoke_native
 };
 
 //
@@ -2125,9 +2407,10 @@ object_t eval_block(scope_t scope, object_t code)
 
 //
 
-object_t invoke_lambda(struct lambda* lambda, int argct, object_t* args)
+object_t invoke_lambda(void* ptr, int argct, object_t* args)
 {
-	struct array* params = &lambda->l_params;
+	lambda_t lambda = ptr;
+	struct array* params = &lambda->params;
 	const char* name = lambda->l_name ? unwrap_symbol(lambda->l_name) : NULL;
 
 	assert_arg_count(name, argct, params->size);
@@ -2136,8 +2419,8 @@ object_t invoke_lambda(struct lambda* lambda, int argct, object_t* args)
 	scope_t scope = to_scope(scope_obj);
 
 	for (int i=0; i<params->size; i++)
-		bind_in_scope(scope, params->data[i], args[i]);
-	object_t result = eval_block(scope, lambda->l_body);
+		define(scope, params->data[i], args[i]);
+	object_t result = eval_block(scope, lambda->body);
 
 	decref(scope_obj);
 	return result;
@@ -2192,7 +2475,7 @@ object_t pop_list_or_die(object_t* ptr)
 	return result;
 }
 
-object_t syntax_quote(scope_t scope, object_t code)
+object_t syntax_quote(scope_t scope, object_t code) // quote
 {
 	object_t result = pop_list_or_die(&code);
 	incref(result);
@@ -2205,18 +2488,18 @@ bool unbox_int(int*, object_t);
 
 bool eq(struct object* x, struct object* y);
 
-object_t syntax_and(scope_t scope, object_t code)
-{
-	object_t expr;
+// object_t syntax_and(scope_t scope, object_t code)
+// {
+// 	object_t expr;
 
-	while ((expr = pop_list(&code)))
-		if (! eval_boolean(scope, expr))
-			return wrap_bool(false);
+// 	while ((expr = pop_list(&code)))
+// 		if (! eval_boolean(scope, expr))
+// 			return wrap_bool(false);
 
-	return wrap_bool(true);
-}
+// 	return wrap_bool(true);
+// }
 
-object_t native_cons(int argct, object_t* args)
+object_t native_cons(int argct, object_t* args) // cons
 {
 	assert_arg_count("cons", argct, 2);
 	return wrap_pair(args[0], args[1]);
@@ -2228,7 +2511,7 @@ object_t native_eqp(int argct, object_t* args) // eq?
 	return wrap_bool(eq(args[0], args[1]));
 }
 
-object_t native_list(int argct, object_t* args)
+object_t native_list(int argct, object_t* args) // list
 {
 	object_t result = wrap_nil();
 
@@ -2238,7 +2521,7 @@ object_t native_list(int argct, object_t* args)
 	return result;
 }
 
-object_t native_fold(int argct, object_t* args)
+object_t native_fold(int argct, object_t* args) // fold
 {
 	assert_arg_count("fold", argct, 3);
 
@@ -2261,7 +2544,7 @@ object_t native_fold(int argct, object_t* args)
 
 int unbox_int_or_die(const char*, object_t);
 
-object_t native_modulo(int argct, object_t* args)
+object_t native_modulo(int argct, object_t* args) // modulo
 {
 	assert_arg_count("modulo", argct, 2);
 	int a = unbox_int_or_die("modulo", args[0]);
@@ -2340,7 +2623,7 @@ object_t native_symbolp(int argct, object_t* args) // symbol?
 
 object_t reverse(object_t list);
 
-object_t native_reverse(int argct, object_t* args)
+object_t native_reverse(int argct, object_t* args) // reverse
 {
 	assert_arg_count("reverse", argct, 1);
 	object_t result = reverse(args[0]);
@@ -2397,7 +2680,7 @@ bool is_symbol(const char* text, object_t obj)
 	return false;
 }
 
-object_t syntax_cond(scope_t scope, object_t code)
+object_t syntax_cond(scope_t scope, object_t code) // cond
 {
 	object_t clause, test;
 
@@ -2409,7 +2692,7 @@ object_t syntax_cond(scope_t scope, object_t code)
 	return wrap_nil();
 }
 
-object_t syntax_letrec(scope_t outer_scope, object_t code)
+object_t syntax_letrec(scope_t outer_scope, object_t code) // letrec
 {
 	object_t scope_obj = derive_scope(outer_scope);
 	scope_t scope = to_scope(scope_obj);
@@ -2430,7 +2713,7 @@ object_t syntax_letrec(scope_t outer_scope, object_t code)
 	return result;
 }
 
-object_t syntax_let(scope_t outer_scope, object_t code)
+object_t syntax_let(scope_t outer_scope, object_t code) // let
 {
 	object_t scope_obj = derive_scope(outer_scope);
 	scope_t scope = to_scope(scope_obj);
@@ -2451,7 +2734,7 @@ object_t syntax_let(scope_t outer_scope, object_t code)
 	return result;
 }
 
-object_t syntax_lambda(scope_t scope, object_t code)
+object_t syntax_lambda(scope_t scope, object_t code) // lambda
 {
 	pair_t pair = to_pair(code);
 	assert(pair);
@@ -2530,29 +2813,27 @@ const char* unwrap_string(string_t str)
 	return str->value;
 }
 
-struct file {
+struct port {
 	struct object self;
 	FILE* value;
 };
 
-typedef struct file* file_t;
-
-void dispose_file(void* obj)
+void dispose_port(void* obj)
 {
-	file_t file = obj;
-	fclose(file->value);
+	port_t port = obj;
+	fclose(port->value);
 }
 
-struct type TYPE_FILE = {
-	.name = "file",
-	.dispose = dispose_file,
+struct type TYPE_PORT = {
+	.name = "port",
+	.dispose = dispose_port,
 };
 
 struct object* wrap_file(FILE* v)
 {
-	file_t file = malloc(sizeof(*file));
-	file->value = v;
-	return register_object(file, &TYPE_FILE);
+	port_t port = malloc(sizeof(*port));
+	port->value = v;
+	return register_object(port, &TYPE_PORT);
 }
 
 object_t native_open_input_file(int argct, object_t* args) // open-input-file
@@ -2563,24 +2844,16 @@ object_t native_open_input_file(int argct, object_t* args) // open-input-file
 	return wrap_file(f);
 }
 
-file_t to_file(object_t obj)
+port_t to_port(object_t obj)
 {
-	if (obj->type == &TYPE_FILE)
-		return (file_t)obj;
+	if (obj->type == &TYPE_PORT)
+		return (port_t)obj;
 	return NULL;
 }
 
-file_t to_file_or_die(const char* name, object_t obj)
+FILE* unwrap_port(port_t port)
 {
-	file_t file = to_file(obj);
-	if (! file)
-		DIE("Expected argument of %s to be a port, got %s instead", name, typename(obj));
-	return file;
-}
-
-FILE* unwrap_file(file_t file)
-{
-	return file->value;
+	return port->value;
 }
 
 struct character {
@@ -2619,8 +2892,8 @@ struct object* wrap_char(char v)
 object_t native_read_char(int argct, object_t* args) // read-char
 {
 	assert_arg_count("read-char", argct, 1);
-	file_t file = to_file_or_die("read-char", args[0]);
-	FILE* f = unwrap_file(file);
+	port_t port = assert_port("as an argument #1 of read-char", args[0]);
+	FILE* f = unwrap_port(port);
 	int ch = fgetc_or_die(f);
 	if (ch == EOF)
 		return wrap_nil();
@@ -2628,7 +2901,7 @@ object_t native_read_char(int argct, object_t* args) // read-char
 		return wrap_char(ch);
 }
 
-object_t syntax_or(scope_t scope, object_t code)
+object_t syntax_or(scope_t scope, object_t code) // or
 {
 	object_t expr;
 
@@ -2768,13 +3041,13 @@ object_t native_string_set(int argct, object_t* args) // string-set!
 	return args[0];
 }
 
-object_t native_not(int argct, object_t* args)
+object_t native_not(int argct, object_t* args) // not
 {
 	assert_arg_count("not", argct, 1);
 	return wrap_bool(args[0] == wrap_bool(false));
 }
 
-object_t native_display(int argct, object_t* args)
+object_t native_display(int argct, object_t* args) // display
 {
 	for (int i=0; i<argct; i++) {
 		string_t str = to_string(args[i]);
@@ -2887,7 +3160,7 @@ object_t native_string_append(int argct, object_t* args) // string-append
 	return wrap_string(buffer);
 }
 
-object_t native_substring(int argct, object_t* args)
+object_t native_substring(int argct, object_t* args) // substring
 {
 	assert_arg_count("string-copy", argct, 3);
 	string_t strobj = to_string_or_die("substring", args[0]);
@@ -2918,29 +3191,16 @@ object_t reverse(object_t list)
 
 //
 
-struct native;
-typedef struct native* native_t;
-
 native_t to_native(object_t);
-
-object_t invoke_lambda(lambda_t, int, object_t*);
-object_t invoke_native(native_t, int, object_t*);
 
 void decref_many(int argct, object_t* args);
 
 object_t invoke(object_t func, int argct, object_t* args)
 {
-	native_t native;
-	lambda_t lambda;
-	object_t result;
-
-	if ((native = to_native(func))) {
-		result = invoke_native(native, argct, args);
-	} else if ((lambda = to_lambda(func))) {
-		result = invoke_lambda(lambda, argct, args);
-	} else {
+	if (! func->type->invoke) {
 		DIE("Can't invoke object of type %s", typename(func));
 	}
+	object_t result = func->type->invoke(func, argct, args);
 	decref_many(argct, args);
 	return result;
 }
@@ -2981,10 +3241,13 @@ native_t to_native(object_t obj)
 		return (native_t)obj;
 	return NULL;
 }
-object_t invoke_native(native_t native, int argct, object_t* args)
+
+object_t invoke_native(void* ptr, int argct, object_t* args)
 {
+	native_t native = ptr;
 	return native->invoke(argct, args);
 }
+
 void register_native(const char* name, object_t (*func)(int, object_t*))
 {
 	object_t key = wrap_symbol(name);
@@ -2993,7 +3256,7 @@ void register_native(const char* name, object_t (*func)(int, object_t*))
 	native->invoke = func;
 	object_t obj = register_object(native, &TYPE_NATIVE);
 
-	bind_in_scope(REPL_SCOPE, (symbol_t)key, obj);
+	define(REPL_SCOPE, (symbol_t)key, obj);
 	decref(obj);
 	decref(key);
 }
@@ -3031,7 +3294,7 @@ syntax_t to_syntax(object_t obj)
 typedef struct macro* macro_t;
 
 macro_t to_macro(object_t);
-object_t eval_macro(scope_t scope, macro_t macro, object_t body);
+object_t expand_macro(scope_t scope, macro_t macro, object_t body);
 
 object_t eval_syntax(scope_t scope, object_t head, object_t body)
 {
@@ -3040,8 +3303,12 @@ object_t eval_syntax(scope_t scope, object_t head, object_t body)
 		return syntax->eval(scope, body);
 
 	macro_t macro = to_macro(head);
-	if (macro)
-		return eval_macro(scope, macro, body);
+	if (macro) {
+		object_t new_code = expand_macro(scope, macro, body);
+		object_t result = eval_lazy(scope, new_code);
+		decref(new_code);
+		return result;
+	}
 
 	return NULL;
 }
@@ -3056,18 +3323,207 @@ void register_syntax(const char* name, object_t (*func)(scope_t, object_t))
 	syntax->eval = func;
 	object_t obj = register_object(syntax, &TYPE_SYNTAX);
 
-	bind_in_scope(REPL_SCOPE, (symbol_t)key, obj);
+	define(REPL_SCOPE, (symbol_t)key, obj);
 
 	decref(obj);
 	decref(key);
 }
 
+object_t syntax_define_syntax(scope_t scope, object_t code) // define-syntax
+{
+	return syntax_define(scope, code);
+}
+
+object_t syntax_identity(scope_t scope, object_t code) // $
+{
+	return eval_lazy(scope, code);
+}
+
+struct macro {
+	struct object self;
+	object_t literals;
+	object_t rules;
+	symbol_t name;
+};
+
+void reach_macro(void* obj)
+{
+	macro_t macro = obj;
+	mark_reachable(macro->literals);
+	mark_reachable(macro->rules);
+}
+
+struct type TYPE_MACRO = {
+	.name = "macro",
+	.reach = reach_macro
+};
+
+object_t wrap_macro(object_t literals, object_t rules)
+{
+	macro_t macro = malloc(sizeof(*macro));
+	macro->literals = literals;
+	macro->rules = rules;
+	macro->name = NULL;
+	return register_object(macro, &TYPE_MACRO);
+}
+
+object_t syntax_rules(scope_t scope, object_t code) // syntax-rules
+{
+	object_t literals = pop_list(&code);
+	if (! literals)
+		DIE("Malformed syntax-rules");
+	return wrap_macro(literals, code);
+}
+
 macro_t to_macro(object_t obj)
 {
+	if (obj->type == &TYPE_MACRO)
+		return (macro_t)obj;
 	return NULL;
 }
 
-object_t eval_macro(scope_t scope, macro_t macro, object_t body)
+object_t append(object_t first, object_t second)
 {
-	DIE("Not implemented");
+	object_t rev, scan, result, obj;
+
+	if (is_nil(first)) {
+		incref(second);
+		return second;
+	}
+
+	rev = reverse(first);
+	scan = rev;
+	result = second;
+
+	while ((obj = pop_list(&scan)))
+		push_list(&result, obj);
+
+	decref(rev);
+	return result;
+}
+
+object_t substitute_template(object_t template, symbol_t key, object_t value)
+{
+	object_t result;
+
+	pair_t pair = to_pair(template);
+	if (pair) {
+		object_t new_car = substitute_template(car(pair), key, value);
+		object_t new_cdr = substitute_template(cdr(pair), key, value);
+
+		if (! new_cdr) {
+			incref(value);
+			new_cdr = value;
+		}
+
+		if (! new_car) {
+			result = append(value, new_cdr);
+			decref(new_cdr);
+			return result;
+		}
+
+		if ((new_car == car(pair)) && (new_cdr == cdr(pair))) {
+			result = template;
+			incref(template);
+		} else {
+			result = wrap_pair(new_car, new_cdr);
+		}
+		decref(new_car);
+		decref(new_cdr);
+		return result;
+	}
+
+	symbol_t sym = to_symbol(template);
+	if (sym) {
+		if (strcmp(unwrap_symbol(sym), unwrap_symbol(key)) == 0) {
+			if (is_symbol("...", template))
+				return NULL;
+			result = value;
+			incref(result);
+		} else {
+			result = template;
+			incref(result);
+		}
+		return result;
+	}
+
+	incref(template);
+	return template;
+}
+
+object_t transform_syntax(object_t rule, object_t literals, object_t body)
+{
+	// pair_t pattern_template = assert_pair("syntax rule", rule);
+	object_t pattern = pop_list(&rule);
+	if (! pattern)
+		DIE("Malformed syntax rule");
+
+	object_t template = pop_list(&rule);
+	if (! template)
+		DIE("Malformed syntax rule");
+	incref(template);
+
+	object_t tag = pop_list(&pattern);
+	if (! tag)
+		DIE("Malformed syntax rule");
+
+	// DEBUG("template", template);
+
+	object_t token;
+	while ((token = pop_list(&pattern))) {
+		symbol_t sym = assert_symbol("syntax rule pattern", token);
+		if (is_symbol("...", token)) {
+			object_t result = substitute_template(template, sym, body);
+			decref(template);
+			return result;
+		}
+		object_t item = pop_list(&body);
+		if (! item)
+			return NULL;
+
+		object_t new_template = substitute_template(template, sym, item);
+		decref(template);
+		template = new_template;
+	}
+
+	if (is_nil(body))
+		return template;
+
+	decref(template);
+	return NULL;
+}
+
+object_t expand_macro(scope_t scope, macro_t macro, object_t body)
+{
+	object_t rules, rule, new_body;
+
+	rules = macro->rules;
+
+	while ((rule = pop_list(&rules))) {
+		new_body = transform_syntax(rule, macro->literals, body);
+		if (new_body)
+			return new_body;
+	}
+
+	if (macro->name)
+		DIE("Unable to expand macro `%s`", unwrap_symbol(macro->name));
+	else
+		DIE("Unable to expand macro");
+}
+
+void assign_name(object_t obj, symbol_t name)
+{
+	lambda_t lambda = to_lambda(obj);
+	if (lambda) {
+		if (! lambda->l_name)
+			lambda->l_name = name;
+		return;
+	}
+
+	macro_t macro = to_macro(obj);
+	if (macro) {
+		if (! macro->name)
+			macro->name = name;
+		return;
+	}
 }
