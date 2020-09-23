@@ -12,7 +12,6 @@ STDIN.each_line do |line|
     chapter_index = $LAST_MATCH_INFO[1]
     filename = "leanpub/chapter_#{chapter_index}.md"
     output = File.open(filename, 'w')
-    output.write("# Geeky Fox Is Scheming\n\n") if chapter_index == '1'
     output.write("{sample:true}\n") if chapter_index.to_i <= 3
     output.write(line)
     merge = false

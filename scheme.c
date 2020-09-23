@@ -58,7 +58,7 @@ int main(int argc, const char** argv)
 // a few things on the way, but it's still double work. Or else I can refuse
 // to accept sunk costs and then stubbornly work around the
 // incompatibilities between my own standard library implementation and
-// my own garbage collector, and that's just dumb.
+// my own garbage collector. And that's just dumb.
 //
 // But as long as something *isn't done at all*, I can be totally sure
 // that it *isn't done wrong*. There's a certain Zen feeling to it.
@@ -80,7 +80,7 @@ int main(int argc, const char** argv)
 // that just writing in Scheme is too easy, so I wrote my own interpreter,
 // and then realizing that **even that is not fun enough**, so I wrapped it
 // into a sort of "literary programming" exercise. In a (highly unlikely)
-//situation when I'll have to write my own multithreaded embeddable Scheme
+// situation when I'll have to write my own multithreaded embeddable Scheme
 // interpreter, I'll just start from scratch, and that's about it.
 //
 // Anyway, I'll write functions to setup and teardown runtime once I
@@ -175,11 +175,11 @@ void execute_file(const char* filename)
 // doable. In fact, if you're coding on top of a rich fat framework (think
 // Spring or Django) this indeed is the natural and only way to do it. But
 // in this case there's no framework, and operating system is effectively
-// **the** invoker ("*there was nothing between us, not even a condom...*"
-// yeah, really bad joke), and `abort()`ing is a proper way to notify the
-// operating system about the problem, so #2 is pretty much #3, just
-// without boilerplate code to pull error status to `main()` and then abort
-// there.
+// **the** invoker ("*there was nothing between us... not even a
+// condom...*" yeah, really bad joke), and `abort()`ing is a proper way to
+// notify the operating system about the problem, so #2 is pretty much #3,
+// just without boilerplate code to pull error status to `main()` and then
+// abort there.
 //
 // Anyway, let's implement `execute()`
 //
@@ -272,8 +272,8 @@ void repl()
 //
 // Likewise, here we're venturing deep into dark swampy forests of
 // Nerdyland where common understanding of "fun" doesn't apply. By
-// the standards of normal folks whose idea of having fun implies
-// things like mountain skiing and dance festivals, spending evenings
+// the standards of normal folks whose idea of having fun involves
+// activities like mountain skiing and dance festivals, spending evenings
 // tinkering with implementation of infinite recursion is hopelessly
 // weird either way. So I mean absolutely no judgement towards those
 // amazing guys and gals who enjoy messing with lexers, parsers, and
@@ -313,14 +313,15 @@ object_t read_object(FILE* in)
 //
 // Lisp syntax is famously Spartan. Basically all you get is:
 // * lists (those thingies with ((astonishingly) copious) amount of
-// parentheses),
-// * strings (delimited by "double quotes" or however you call that character),
+//   parentheses),
+// * strings (delimited by "double quotes" or however you call that
+//   character),
 // * quotations (if you don't know who these are, you better look it up in
-// Scheme spec, but basically it's a way to specify that ```'(+ 1 2)``` is
-// *literally* a list with three elements and not an expression that adds
-// two numbers),
+//   Scheme spec, but basically it's a way to specify that ```'(+ 1 2)```
+//   is *literally* a list with three elements and not an expression that
+//   adds two numbers),
 // * and atoms, which are pretty much everything else including numbers,
-// characters, and symbols.
+//   characters, and symbols.
 //
 // So what I'm doing here is I'm looking at the first non-trivial
 // character in the input stream and if it's an opening parenthesis I
@@ -1519,7 +1520,84 @@ symbol_t assert_symbol(const char* context, object_t obj)
 //
 // And this is a good place to wrap up this chapter and move on to
 // ## Chapter 5 where I reinvent the wheel and then collect garbage
-// CUTOFF
+//
+// I think I mentioned Pascal somewhere in Chapter 2 of this story. As
+// I remember, I haven't touched it since high school, which makes it two
+// decades, give or take a year. But, truth be told, I (very briefly)
+// dabbled with an idea of using Pascal in this very project. I mean,
+// implementing an obscure programming language in another obscure
+// programming language, just how cool is that!
+//
+// Then I scanned the manual for Free Pascal and realized that no, this
+// is definitely not gonna fly. The show-stopper was Pascal's lack of
+// forward declaration for types, so you must define a type above the
+// places where you use it, or else it's an error. And if it doesn't seem
+// like such a big deal, have you noticed that by now I wrote a
+// full-fledged parser, and a good chunk of an evaluation engine, and few
+// bits of standard library, and I still haven't defined *a single* data
+// type. I just said "oh yeah, this is a pointer to `struct object`,
+// don't ask," and C compiler is, like, "okay, I'm cool with that." But
+// in Pascal it's apparently illegal.
+//
+// And no, this is not just a funny gimmick. In fact it's an experiment
+// in tackling one of the hardest problems in software engineering which
+// is: how to demonstrate that design of your program makes any sense?
+//
+// One solution is to have a design spec... But wait, let's take a step
+// back.
+//
+// One option is to go, let's call it aggressively ultra-pragmatic, and to
+// perform a variation of "This program WORKS! People USE IT! How DARE you
+// ask for more than that?! Why do you even CARE?!"
+//
+// Or something like that. And that's fine. I mean, if your boss is
+// okay with that, and your customers are okay with that, and your
+// coworkers are okay with that, who am I to judge, really?
+//
+// But this disclaimer had to be made. Before I dive into ranting about
+// suboptimal solutions, I'm obliged to give proper credit to people
+// who at least acknowledge the problem. Or else it'd be like being
+// told that "compared to serious runners you're below mediorce" by
+// people  who haven't exercised for, I dunno, four reincarnations.
+//
+// So. One way to tackle this problem is to have a design spec where
+// you use natural human language to elaborate the underlying logic,
+// interactions between individual pieces, decisions made, and all
+// that stuff. It's not a bad idea per se, but it has... Not so much
+// a pitfall, but more like a fundamental limitation: you can't
+// just give your design document to a computer and tell it to
+// execute it. You still have to write machine-readable code. So
+// you end up with two intrinsically independent artifacts, and
+// unless you have a proper process to prevent it they get out of
+// sync, and your spec becomes "more what you call guidelines" than
+// actual spec.
+//
+// Another option is to stick with just code, and then make sure
+// your code is excellent: concise functions, transparent interfaces,
+// meaningful naming, all the good stuff. And while it's certainly a great
+// idea it has its own fundamental limitation: programming languages just
+// aren't particularly good for expressing intent. I mean, you can get
+// pretty far with explaining *how* your program works by code itself,
+// but not such much *why.* For that you still need some kind of
+// documentation.
+//
+// And so my idea, and keep in mind it's an ongoing experiment and
+// not The Next Silver Bullet for which I'm selling certifications,
+// was to essentially combine the two in such a way that the whole
+// thing has a logical flow of a spec, but then the code is organically
+// embedded into it, but then in the end it's just a normal program
+// (albeit with copious comments) that can be compiled by a vanilla
+// compiler rather than some "literate programming" contraption.
+//
+// And this is why it's important that underlying programming
+// language is liberal with regards to code layout, or else you end
+// up with a Sysyphean task when you must state that this data type
+// has such and such fields even though you won't be able to justify
+// their necessity until fifty pages later.
+//
+// All this was an extremely long introduction to the very first real
+// data type in this program. But finally I proudly present you
+//
 
 struct array {
 	void** data;
@@ -1529,45 +1607,85 @@ struct array {
 
 typedef struct array* array_t;
 
-void init_array(array_t);
-void reclaim_array(array_t);
-void push_array(array_t, void*);
+//
+// and after seeing it you're obliged to ask "Dude, but why don't
+// you use C++, at least you'll get `std::vector` for free?"
+//
+// And that's indeed a reasonable question. I even agree that from
+// a practical standpoint C++ would be at least as good as plain C,
+// and likely better.
+//
+// However. For a project like this one the very concept of a
+// "practical standpoint" is a slippery slope. Because right after
+// "but why don't you use C++ and get `std::vector` for free?" comes
+// "but why don't you use Java and get garbage collector for free?"
+// and then "but why you don't just `apt install scheme`?" and
+// eventually "but why you don't learn some hipper language?"
+//
+// And then you find yourself surrounded by weirdos at a shady Kotlin
+// meetup, and you lost count how many tasteless beers you had, and
+// you're wondering if things will end very bad or even worse.
+//
+// No, really, the purpose of this whole undertaking is not to build
+// anything. It's not even to learn, not something specific anyway, but
+// mostly just to have fun doing it. Essentially it's simply one big
+// coding exercise. And that's why one of the guiding principles here is
+// when choosing between a more practical option and one that's less
+// practical but still reasonable, go for the latter.
+//
+// Oh, and "still reasonable" explains why I use plain C and not,
+// I dunno, Fortran 66. Writing a Scheme interpreter in Fortran 66
+// will get you deep into "pain and humiliation for the sake of
+// pain and humiliation" territory. Of course there's absolutely
+// nothing wrong with enjoying some pain and humiliation, except
+// that a computer is not the best home appliance to use for these
+// purposes, if you get what I mean.
+//
+// Anyway. Dynamically expandable array is one of the most trivial
+// things in this entire story, and I'm not going to spend any time
+// explaining it.
+//
+
+void init_array(array_t arr)
+{
+	arr->data = malloc(sizeof(void*) * 8);
+	arr->available = 8;
+	arr->size = 0;
+}
+
+void dispose_array(array_t arr)
+{
+	free(arr->data);
+}
 
 void push_array(array_t arr, void* entry)
 {
 	if (arr->size == arr->available) {
 		arr->available *= 2;
-		if (arr->available < 8)
-			arr->available = 8;
 		arr->data = realloc(arr->data, sizeof(void*)*arr->available);
 	}
 	arr->data[arr->size++] = entry;
 }
 
-//
-
 void* pop_array(array_t arr)
 {
 	if (arr->size == 0)
 		return NULL;
-   return arr->data[--arr->size];
+	return arr->data[--arr->size];
 }
 
 //
+// But the reason *why* I suddenly decided I need a dynamically expandable
+// list is because I'm gonna need it to build a garbage collector. Not
+// that I really need a garbage collector, but when you have a parser, and
+// an evaluation engine, and a chunk of the standard library, it's so
+// hard to resist from a not-so-subtle Hunter S. Thompson reference.
+//
+// Of course I need a garbage collector in my Scheme interpreter, but it
+// doesn't have to be very sophisticated.
+//
 
 #include <strings.h>
-
-void init_array(array_t arr)
-{
-	bzero(arr, sizeof(struct array));
-}
-
-void reclaim_array(struct array* arr)
-{
-	free(arr->data);
-}
-
-void* pop_array(array_t);
 
 bool is_garbage(object_t);
 void mark_reachable(void*);
@@ -1594,18 +1712,22 @@ void collect_garbage()
 
 	while (index < count) {
 		obj = ALL_OBJECTS.data[index];
-		if (! is_garbage(obj)) {
+		if (is_garbage(obj)) {
+			reclaim_object(obj);
+			ALL_OBJECTS.data[index] = ALL_OBJECTS.data[--count];
+		} else {
 			index++;
-			continue;
 		}
-		reclaim_object(obj);
-		ALL_OBJECTS.data[index] = ALL_OBJECTS.data[--count];
 	}
 
 	ALL_OBJECTS.size = count;
 }
 
-// Chapter Seven
+//
+// And so I manage to get away with a simplistic mark-and-sweep, which
+// makes a nice segue to
+// ## Chapter 6, where things become objectionable
+// CUTOFF
 
 struct type {
 	const char* name;
@@ -1790,26 +1912,6 @@ pair_t to_pair(object_t obj)
 }
 
 // CUTOFF
-
-//
-
-void eval_args(array_t, scope_t, object_t);
-
-//
-
-void eval_define(scope_t eval_scope, scope_t bind_scope, symbol_t key, object_t expr);
-
-//
-
-//
-
-bool eval_boolean(scope_t scope, object_t expr)
-{
-	object_t obj = eval_eager(scope, expr);
-	bool result = (obj != wrap_bool(false));
-	decref(obj);
-	return result;
-}
 
 //
 
@@ -2041,6 +2143,14 @@ object_t wrap_bool(bool v)
 	return (object_t)obj;
 }
 
+bool eval_boolean(scope_t scope, object_t expr)
+{
+	object_t obj = eval_eager(scope, expr);
+	bool result = (obj != wrap_bool(false));
+	decref(obj);
+	return result;
+}
+
 //
 
 struct integer {
@@ -2185,7 +2295,7 @@ void lambda_reach(void* obj)
 void lambda_dispose(void* obj)
 {
 	lambda_t lambda = obj;
-	reclaim_array(&lambda->params);
+	dispose_array(&lambda->params);
 }
 
 object_t invoke_lambda(void* lambda, int argct, object_t* args);
@@ -2226,11 +2336,15 @@ lambda_t to_lambda(object_t obj)
 	return NULL;
 }
 
+object_t optimize(scope_t scope, object_t body);
+
 object_t wrap_lambda(scope_t scope, object_t params, object_t body)
 {
+	object_t optimized_body = optimize(scope, body);
+
 	lambda_t lambda = malloc(sizeof(*lambda));
 	lambda->l_name = NULL;
-	lambda->body = body;
+	lambda->body = optimized_body;
 	lambda->l_scope = scope;
 	init_array(&lambda->params);
 
@@ -2240,7 +2354,11 @@ object_t wrap_lambda(scope_t scope, object_t params, object_t body)
 		push_array(&lambda->params, param);
 	}
 
-	return register_object(lambda, &TYPE_LAMBDA);
+	object_t result = register_object(lambda, &TYPE_LAMBDA);
+
+	decref(optimized_body);
+
+	return result;
 }
 
 //
@@ -2285,10 +2403,8 @@ thunk_t to_thunk(object_t obj)
 struct scope {
 	struct object self;
 	struct dict s_binds;
-	struct scope* s_parent;
+	scope_t parent;
 };
-
-typedef struct scope* scope_t;
 
 object_t lookup_in_scope(scope_t scope, symbol_t key)
 {
@@ -2296,7 +2412,7 @@ object_t lookup_in_scope(scope_t scope, symbol_t key)
 		void* value = dict_lookup_fast(&scope->s_binds, key->value, key->hash);
 		if (value)
 			return value;
-		scope = scope->s_parent;
+		scope = scope->parent;
 	}
 	return NULL;
 }
@@ -2306,7 +2422,7 @@ void scope_reach(void* obj)
 	scope_t scope = obj;
 	struct dict* binds = &scope->s_binds;
 	dict_reach(binds);
-	mark_reachable(scope->s_parent);
+	mark_reachable(scope->parent);
 }
 
 void scope_dispose(void* obj)
@@ -2341,7 +2457,7 @@ void define(scope_t scope, symbol_t key, object_t value)
 	void* ptr = dict_put(&scope->s_binds, key, value);
 	if (ptr != NULL)
 		DIE("%s is already defined", strkey);
-	if (! scope->s_parent)
+	if (! scope->parent)
 		incref(value);
 	assign_name(value, key);
 }
@@ -2377,7 +2493,7 @@ object_t derive_scope(scope_t parent)
 {
 	scope_t scope = malloc(sizeof(*scope));
 	dict_init(&scope->s_binds);
-	scope->s_parent = parent;
+	scope->parent = parent;
 	return register_object(scope, &SCOPE);
 }
 
@@ -2461,8 +2577,8 @@ void teardown_runtime()
 	dict_decref(&ALL_SYMBOLS);
 	dict_dispose(&ALL_SYMBOLS);
 	collect_garbage();
-	reclaim_array(&ALL_OBJECTS);
-	reclaim_array(&REACHABLE_OBJECTS);
+	dispose_array(&ALL_OBJECTS);
+	dispose_array(&REACHABLE_OBJECTS);
 }
 
 //
@@ -2487,17 +2603,6 @@ object_t syntax_quote(scope_t scope, object_t code) // quote
 bool unbox_int(int*, object_t);
 
 bool eq(struct object* x, struct object* y);
-
-// object_t syntax_and(scope_t scope, object_t code)
-// {
-// 	object_t expr;
-
-// 	while ((expr = pop_list(&code)))
-// 		if (! eval_boolean(scope, expr))
-// 			return wrap_bool(false);
-
-// 	return wrap_bool(true);
-// }
 
 object_t native_cons(int argct, object_t* args) // cons
 {
@@ -2704,7 +2809,9 @@ object_t syntax_letrec(scope_t outer_scope, object_t code) // letrec
 		object_t keyobj = pop_list_or_die(&binding);
 		object_t expr = pop_list_or_die(&binding);
 		symbol_t key = assert_symbol("letrec binding name", keyobj);
-		eval_define(scope, scope, key, expr);
+		object_t value = eval_eager(scope, expr);
+		define(scope, key, value);
+		decref(value);
 	}
 
 	object_t result = eval_block(scope, code);
@@ -2725,7 +2832,9 @@ object_t syntax_let(scope_t outer_scope, object_t code) // let
 		object_t keyobj = pop_list_or_die(&binding);
 		symbol_t key = assert_symbol("let binding name", keyobj);
 		object_t expr = pop_list_or_die(&binding);
-		eval_define(outer_scope, scope, key, expr);
+		object_t value = eval_eager(outer_scope, expr);
+		define(scope, key, value);
+		decref(value);
 	}
 
 	object_t result = eval_block(scope, code);
@@ -2781,7 +2890,9 @@ object_t syntax_letseq(scope_t scope, object_t code) // let*
 			decref(scope_obj);
 		scope_t new_scope = to_scope(new_scope_obj);
 
-		eval_define(scope, new_scope, keysym, expr);
+		object_t value = eval_eager(scope, expr);
+		define(new_scope, keysym, value);
+		decref(value);
 
 		scope_obj = new_scope_obj;
 		scope = new_scope;
@@ -3008,13 +3119,13 @@ void set_in_scope(scope_t scope, symbol_t key, object_t value)
 		object_t old_value = dict_lookup_fast(&s->s_binds, strkey, strhash(strkey));
 		if (old_value) {
 			dict_put(&s->s_binds, key, value);
-			if (! s->s_parent) {
+			if (! s->parent) {
 				incref(value);
 				decref(old_value);
 			}
 			return;
 		}
-		s = s->s_parent;
+		s = s->parent;
 	}
 	DIE("Variable %s is not bound to anything", strkey);
 }
@@ -3526,4 +3637,42 @@ void assign_name(object_t obj, symbol_t name)
 			macro->name = name;
 		return;
 	}
+}
+
+object_t optimize(scope_t scope, object_t code)
+{
+	if (scope->parent) {
+		incref(code);
+		return code;
+	}
+
+	object_t result = code;
+
+	symbol_t sym = to_symbol(code);
+	if (sym) {
+		object_t obj = lookup_in_scope(scope, sym);
+		if (obj && (to_syntax(obj) || to_macro(obj) || to_native(obj)))
+			result = obj;
+		incref(result);
+		return result;
+	}
+
+	pair_t pair = to_pair(code);
+	if (pair) {
+		object_t head = car(pair);
+		if (is_symbol("quote", head))
+			goto done;
+		object_t tail = cdr(pair);
+		object_t new_head = optimize(scope, head);
+		object_t new_tail = optimize(scope, tail);
+		if ((head != new_head) || (tail != new_tail))
+			result = wrap_pair(new_head, new_tail);
+		decref(new_head);
+		decref(new_tail);
+	}
+
+done:
+	if (code == result)
+		incref(result);
+	return result;
 }

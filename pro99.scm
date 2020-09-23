@@ -272,17 +272,19 @@
 
 ; problem #35
 (define (prime-factors x)
-	(define (impl acc n pms)
-		(cond
-			((= n 1)
-				acc)
-			((< n (* (car pms) (car pms)))
-				(cons n acc))
-			((= 0 (modulo n (car pms)))
-				(impl (cons (car pms) acc) (/ n (car pms)) pms))
-			(else
-				(impl acc n (cdr (extend-primes! pms))))))
-	(reverse (impl '() x primes)))
+	(letrec (
+			(impl
+				(lambda (acc n pms)
+					(cond
+						((= n 1)
+							acc)
+						((< n (* (car pms) (car pms)))
+							(cons n acc))
+						((= 0 (modulo n (car pms)))
+							(impl (cons (car pms) acc) (/ n (car pms)) pms))
+						(else
+							(impl acc n (cdr (extend-primes! pms))))))))
+	(reverse (impl '() x primes))))
 
 (writeln (prime-factors 315))
 (writeln (prime-factors 331155))

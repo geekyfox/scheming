@@ -5,7 +5,7 @@ What's neat about implementing a Lisp dialect is that you can be done with parsi
 
 Of course "funnier" is relative here, and not just grammatically, but also in a Theory of Relativity kind of sense. I mean, Theory of Relativity describes extreme conditions where gravity is so high that common Newtonian laws don't work any more.
 
-Likewise, here we're venturing deep into dark swampy forests of Nerdyland where common understanding of "fun" doesn't apply. By the standards of normal folks whose idea of having fun implies things like mountain skiing and dance festivals, spending evenings tinkering with implementation of infinite recursion is hopelessly weird either way. So I mean absolutely no judgement towards those amazing guys and gals who enjoy messing with lexers, parsers, and all that shebang. Whatever floats your boat, really!
+Likewise, here we're venturing deep into dark swampy forests of Nerdyland where common understanding of "fun" doesn't apply. By the standards of normal folks whose idea of having fun involves activities like mountain skiing and dance festivals, spending evenings tinkering with implementation of infinite recursion is hopelessly weird either way. So I mean absolutely no judgement towards those amazing guys and gals who enjoy messing with lexers, parsers, and all that shebang. Whatever floats your boat, really!
 
 This had to be said. Anyway, back to parsing.
 

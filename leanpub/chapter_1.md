@@ -1,5 +1,3 @@
-# Geeky Fox Is Scheming
-
 {sample:true}
 ## Chapter 1 where the story begins
 
@@ -34,7 +32,7 @@ Let's say, I start with writing a piece of standard library. I'm certainly going
 
 But then I'm running a risk of ending up with an implementation of a chunk of Scheme standard library that is neat, and cute, and pretty, and a garbage collector that is as terrific as a garbage collector in a pet project may possibly be, and **they don't quite fit!**
 
-And then I'll have a dilemma. Either I'll have to redo one or both of them. Which probably won't be 100% waste, as I hope to have learned a few things on the way, but it's still double work. Or else I can refuse to accept sunk costs and then stubbornly work around the incompatibilities between my own standard library implementation and my own garbage collector, and that's just dumb.
+And then I'll have a dilemma. Either I'll have to redo one or both of them. Which probably won't be 100% waste, as I hope to have learned a few things on the way, but it's still double work. Or else I can refuse to accept sunk costs and then stubbornly work around the incompatibilities between my own standard library implementation and my own garbage collector. And that's just dumb.
 
 But as long as something *isn't done at all*, I can be totally sure that it *isn't done wrong*. There's a certain Zen feeling to it.
 
@@ -118,7 +116,7 @@ In this case option #1 is unavailable. Because, well, failing to open a file tha
 
 Oh, of course there are insane ways to do it, for instance I can just quietly skip the problematic file, and later collapse in an obscure way because I can't find functions that were supposed to be defined in that file, or take your guess, but I'm not even going to spend time explaining why I'm not doing that.
 
-Option #3 is interesting because this is what many programmers would consider a natural and only alternative for the case when #1 is not doable. In fact, if you're coding on top of a rich fat framework (think Spring or Django) this indeed is the natural and only way to do it. But in this case there's no framework, and operating system is effectively **the** invoker ("*there was nothing between us, not even a condom...*" yeah, really bad joke), and `abort()`ing is a proper way to notify the operating system about the problem, so #2 is pretty much #3, just without boilerplate code to pull error status to `main()` and then abort there.
+Option #3 is interesting because this is what many programmers would consider a natural and only alternative for the case when #1 is not doable. In fact, if you're coding on top of a rich fat framework (think Spring or Django) this indeed is the natural and only way to do it. But in this case there's no framework, and operating system is effectively **the** invoker ("*there was nothing between us... not even a condom...*" yeah, really bad joke), and `abort()`ing is a proper way to notify the operating system about the problem, so #2 is pretty much #3, just without boilerplate code to pull error status to `main()` and then abort there.
 
 Anyway, let's implement `execute()`
 

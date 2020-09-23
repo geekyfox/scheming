@@ -1,4 +1,4 @@
-CC = gcc
+CC = cc
 CFLAGS = -Wall -g
 
 .PHONY: test
@@ -12,6 +12,10 @@ sync: all
 	git add .
 	git commit -m 'Tweaks'
 	git push wip master
+
+.PHONY: pull
+pull:
+	git pull --rebase wip master
 
 .PHONY: all
 all: clean format test leanpub
