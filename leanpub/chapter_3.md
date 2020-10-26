@@ -7,7 +7,7 @@ Of course there are legit usages for "we," such as academic writing where all of
 
 But using "we did it" when it's actually "I did it" (and it's stylistically appropriate to say "I did it") feels to me like speaker is a wimp who wants to avoid the responsibility.
 
-Likewise, using "we" when it's actually "I and Joe, mostly Joe" feels like reluctanse to give a fair share of credit.
+Likewise, using "we" when it's actually "I and Joe, mostly Joe" feels like reluctance to give a fair share of credit.
 
 Okay, enough of that, let's implement `eval_repl()`
 
@@ -28,7 +28,7 @@ object_t eval_repl(object_t expr)
 
 That's a one-liner function that relies on two important concepts.
 
-First one is the scope. Scope is pretty much just a binding between variables' names and their values. For now just think of it as a sort of a dictionary (it's not exactly that, but we'll get there)
+First one is the scope. Scope is pretty much just a binding between variables' names and their values. For now just think of it as a sort of a dictionary (it's not exactly that, but we'll get there when we'll get there).
 
 Another one is differentiation between eager and lazy evaluation. Before I go into explaining *what exactly do I mean by eager and lazy evaluation* in the context of this story, I first have to elaborate the pragmatics for having all that at the first place.
 
@@ -84,9 +84,11 @@ Which also sets a constraint on what a "proper" solution should be: it must be p
 
 #2 looks like a superfun thing to play with, and for toy snippets it seems deceptively simple. But thinking just a little bit about pesky stuff like mutually recursive functions, and self-modifying-ish code (think `(set! infinite-loop something-else)` *from within* `infinite-loop`), and escape procedures, and all this starts to feel like a breeding ground for wacky corner cases, and I don't want to commit to being able to weed them all out.
 
-#3 on the contrary is very simple, both conceptually and implementation-wise, so that's what I'll do (although I might do #2 on top of it later; because it looks like a superfun thing to play with)
+#3 on the contrary is very simple, both conceptually and implementation-wise, so that's what I'll do (although I might do #2 on top of it later; because it looks like a superfun thing to play with).
 
 Now let's get back to lazy vs eager. "Lazy" in this context means that evaluation function may return either a result (if computation is finished) or a thunk (a special object that describes what to do next). Whereas "eager" means that evaluation function will always return the final result.
+
+"Eager" evaluation can be easily arranged by getting a "lazy" result first...
 
 ``` c
 
@@ -101,7 +103,7 @@ object_t eval_eager(scope_t scope, object_t expr)
 
 ```
 
-"Eager" evaluation can be easily arranged by getting a "lazy" result first...
+...and then reevaluating it until the computation is complete.
 
 ``` c
 
@@ -125,8 +127,6 @@ object_t force(object_t value)
 }
 
 ```
-
-...and then reevaluating it until the computation is complete.
 
 You know, I've just realized it's the third time in this story when I say "I have three ways to deal with it," previous two being considerations about memory management and error handling in Chapter 1.
 
@@ -215,9 +215,9 @@ Much less so in Lisp, where you have `(if foo bar)` for conditional, and `(+ foo
 
 Moreover, even though they behave differently, it's not that *that dissimilar* either. `+` and `cons` are simply functions that accept *values* of `foo` and `bar` and do something with them. Whereas `if` is also simply a function, except that instead of values of its' arguments it accepts *a chunk of code verbatim.*
 
-Let me reiterate: a syntax construct is merely a *data-manipulation function* that happens to have *program's code as the data that it manipulates.* Oh,  and *code as data* is not some runtime introspection shamanistic voodoo, it's just normal lists and symbols and what have you.
+Let me reiterate: a syntax construct is merely a *data manipulation function* that happens to have *program's code as the data that it manipulates.* Oh,  and *code as data* is not some runtime introspection shamanistic voodoo, it's just normal lists and symbols and what have you.
 
-And all of that is facilitated by having the same notation of data and code. That's why parentheses are so cool.
+And all of that is enabled by using the same notation for data and for code. That's why parentheses are so cool.
 
 So, with explanation above in mind, pretty much all this function does is: it evaluates the first item of the S-expression, and if it happens to be an "I want code as is" function, then it's fed code as is, and otherwise it is treated as an "I want values of the arguments" function instead. That's it.
 
@@ -259,6 +259,6 @@ There are few minor funky optimizations to mention though.
 
 1. I put arguments into a buffer and not to a list. I mean, lists are cool for everything except two things. They're not as efficient for "just give me an element at index X" random access, and they're kinda clumsy when it comes to memory allocation. And these are two things I really won't mind having for a function call: as much as I don't care about performance, having to do three `malloc()`s just to call a function of three arguments feels sorta wasteful.
 
-2. I introduce `lambda_t` type for functions that are implemented in Scheme and require tail call optimizations. This is done to separate them from built-in functions that are implemented in C and are supposed to be hand-optimized so that lazy call overhead is unnecessary.
+2. I introduce `lambda_t` type for functions that are implemented in Scheme and require tail call optimizations. This is done to separate them from built-in functions that are implemented in C and are supposed to be hand-optimized so that lazy call overhead is avoidable and unnecessary.
 
 3. I cap the maximum number of arguments that a function can have at 64. I even drafted a rant to rationalize that, but I'm running out of Chardonnay, so let's park it for now and move on to

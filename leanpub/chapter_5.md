@@ -2,7 +2,7 @@
 
 I think I mentioned Pascal somewhere in Chapter 2 of this story. As I remember, I haven't touched it since high school, which makes it two decades, give or take a year. But, truth be told, I (very briefly) dabbled with an idea of using Pascal in this very project. I mean, implementing an obscure programming language in another obscure programming language, just how cool is that!
 
-Then I scanned the manual for Free Pascal and realized that no, this is definitely not gonna fly. The show-stopper was Pascal's lack of forward declaration for types, so you must define a type above the places where you use it, or else it's an error. And if it doesn't seem like such a big deal, have you noticed that by now I wrote a full-fledged parser, and a good chunk of an evaluation engine, and few bits of standard library, and I still haven't defined *a single* data type. I just said "oh yeah, this is a pointer to `struct object`, don't ask," and C compiler is, like, "okay, I'm cool with that." But in Pascal it's apparently illegal.
+Then I scanned the manual for Free Pascal and realized that no, this is definitely not gonna fly. The show-stopper was Pascal's lack of forward declaration for types. So that you must define a type above the places where you use it, or else it's an error. And if it doesn't seem like such a big deal, have you noticed that by now I wrote a full-fledged parser, and a good chunk of an evaluation engine, and few bits of standard library, and I still haven't defined *a single* concrete data type. I just said "oh yeah, this is a pointer to `struct object`, don't ask," and C compiler is, like, "okay, I'm cool with that." But in Pascal it's apparently illegal.
 
 And no, this is not just a funny gimmick. In fact it's an experiment in tackling one of the hardest problems in software engineering which is: how to demonstrate that design of your program makes any sense?
 
@@ -12,7 +12,7 @@ One option is to go, let's call it aggressively ultra-pragmatic, and to perform 
 
 Or something like that. And that's fine. I mean, if your boss is okay with that, and your customers are okay with that, and your coworkers are okay with that, who am I to judge, really?
 
-But this disclaimer had to be made. Before I dive into ranting about suboptimal solutions, I'm obliged to give proper credit to people who at least acknowledge the problem. Or else it'd be like being told that "compared to serious runners you're below mediorce" by people  who haven't exercised for, I dunno, four reincarnations.
+But this disclaimer had to be made. Before I dive into ranting about suboptimal solutions, I'm obliged to give proper credit to people who at least acknowledge the problem. Or else it'd be like being told that "compared to serious runners you're below mediorce" by people who haven't exercised for, I dunno, four reincarnations.
 
 So. One way to tackle this problem is to have a design spec where you use natural human language to elaborate the underlying logic, interactions between individual pieces, decisions made, and all that stuff. It's not a bad idea per se, but it has... Not so much a pitfall, but more like a fundamental limitation: you can't just give your design document to a computer and tell it to execute it. You still have to write machine-readable code. So you end up with two intrinsically independent artifacts, and unless you have a proper process to prevent it they get out of sync, and your spec becomes "more what you call guidelines" than actual spec.
 
@@ -84,48 +84,112 @@ void* pop_array(array_t arr)
 
 But the reason *why* I suddenly decided I need a dynamically expandable list is because I'm gonna need it to build a garbage collector. Not that I really need a garbage collector, but when you have a parser, and an evaluation engine, and a chunk of the standard library, it's so hard to resist from a not-so-subtle Hunter S. Thompson reference.
 
-Of course I need a garbage collector in my Scheme interpreter, but it doesn't have to be very sophisticated.
+Of course I need a garbage collector in my Scheme interpreter, but it doesn't have to be very sophisticated. A simplistic mark-and-sweep would suffice.
+
+During mark-and-sweep garbage collection can be in one of three states:
 
 ``` c
 
-#include <strings.h>
+enum gc_state {
+	REACHED,
+	REACHABLE,
+	GARBAGE,
+};
 
-bool is_garbage(object_t);
-void mark_reachable(void*);
-void mark_reached(void*);
-void reclaim_object(object_t obj);
-void reset_gc_state(object_t);
+```
 
-struct array ALL_OBJECTS;
-struct array REACHABLE_OBJECTS;
+`REACHED` means this object is reachable from call stack, global scope and/or other reachable objects, and we've already propagated its reachability to the objects it refers to (if any).
+
+`REACHABLE` means this object is reachable, but we haven't propagated it's reachability yet.
+
+`GARBAGE` means this object is not reachable and (assuming we examined all objects we have) can be safely disposed.
+
+And then entire algorithm consists of three steps.
+
+``` c
+
+void mark_globally_reachable(void);
+void propagate_reachability(void);
+void dispose_garbage(void);
 
 void collect_garbage()
 {
-	object_t obj;
-
-	REACHABLE_OBJECTS.size = 0;
-
-	for (int i=ALL_OBJECTS.size-1; i>=0; i--)
-		reset_gc_state(ALL_OBJECTS.data[i]);
-
-	while ((obj = pop_array(&REACHABLE_OBJECTS)))
-		mark_reached(obj);
-
-	int count = ALL_OBJECTS.size, index = 0;
-
-	while (index < count) {
-		obj = ALL_OBJECTS.data[index];
-		if (is_garbage(obj)) {
-			reclaim_object(obj);
-			ALL_OBJECTS.data[index] = ALL_OBJECTS.data[--count];
-		} else {
-			index++;
-		}
-	}
-
-	ALL_OBJECTS.size = count;
+	mark_globally_reachable();
+	propagate_reachability();
+	dispose_garbage();
 }
 
 ```
 
-And so I manage to get away with a simplistic mark-and-sweep, which makes a nice segue to
+First mark globally reachable objects as such.
+
+``` c
+
+struct array ALL_OBJECTS;
+struct array REACHABLE_OBJECTS;
+
+bool hasrefs(object_t);
+void set_gc_state(object_t, enum gc_state);
+
+void mark_globally_reachable(void)
+{
+	REACHABLE_OBJECTS.size = 0;
+
+	for (int i=ALL_OBJECTS.size-1; i>=0; i--) {
+		object_t obj = ALL_OBJECTS.data[i];
+
+		if (! hasrefs(obj)) {
+			set_gc_state(obj, GARBAGE);
+			continue;
+		}
+
+		set_gc_state(obj, REACHABLE);
+		push_array(&REACHABLE_OBJECTS, obj);
+	}
+}
+
+```
+
+Then propagate reachability.
+
+``` c
+
+enum gc_state get_gc_state(object_t);
+void reach(object_t);
+
+void propagate_reachability(void)
+{
+	object_t obj;
+
+	while ((obj = pop_array(&REACHABLE_OBJECTS)))
+		if (get_gc_state(obj) == REACHABLE)
+			reach(obj);
+}
+
+```
+
+And finally dispose garbage.
+
+``` c
+
+void dispose(object_t);
+
+void dispose_garbage(void)
+{
+	int scan, keep = 0, count = ALL_OBJECTS.size;
+
+	for (scan = 0; scan < count; scan++) {
+		object_t obj = ALL_OBJECTS.data[scan];
+		if (get_gc_state(obj) == REACHED) {
+			ALL_OBJECTS.data[keep++] = obj;
+			continue;
+		}
+		dispose(obj);
+	}
+
+	ALL_OBJECTS.size = keep;
+}
+
+```
+
+And now we can proceed to

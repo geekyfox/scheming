@@ -193,20 +193,36 @@
 	(letrec (
 			(f (lambda (acc ys k)
 				(if (= k n)
-					(g acc (cdr ys))
+					(reverse-and-append acc (cdr ys))
 					(f
 						(cons (car ys) acc)
 						(cdr ys)
-						(+ k 1)))))
-			(g (lambda (acc ys)
-				(if (null? acc)
-					ys
-					(g
-						(cdr acc)
-						(cons (car acc) ys))))))
+						(+ k 1))))))
 		(f '() xs 1)))
 
+(define (reverse-and-append xs ys)
+	(if (null? xs)
+		ys
+		(reverse-and-append
+			(cdr xs)
+			(cons (car xs) ys))))
+
 (write (remove-at '(a b c d) 2))
+(newline)
+
+; problem #21
+(define (insert-at x xs n)
+	(letrec (
+			(f (lambda (acc ys k)
+				(if (= k n)
+					(reverse-and-append acc (cons x ys))
+					(f
+						(cons (car ys) acc)
+						(cdr ys)
+						(+ k 1))))))
+		(f '() xs 1)))
+
+(write (insert-at 'alfa '(a b c d) 2))
 (newline)
 
 ; problem #31
