@@ -7,6 +7,15 @@
 ; (define (fold f x xs)
 ;	(if (null? xs) x (fold f (f x (car xs)) (cdr xs))))
 
+(define (reverse-impl xs acc)
+	(if (null? xs)
+		acc
+		(reverse-impl (cdr xs) (cons (car xs) acc))))
+
+(define (reverse xs)
+	(reverse-native xs))
+	;(reverse-impl xs '()))
+
 (define (fold-list xs f)
 	(reverse (fold f '() xs)))
 	
@@ -34,12 +43,3 @@
 (define eof-object? null?)
 
 (define (> a b) (< b a))
-
-(define-syntax and
-	(syntax-rules ()
-		((and)
-			#t)
-		((and test)
-			test)
-		((and test1 test2 ...)
-			(if test1 (and test2 ...) #f))))

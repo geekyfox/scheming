@@ -21,6 +21,9 @@ c
 (g h a b c d e f)
 (a c d)
 (a alfa b c d)
+(4 5 6 7 8 9)
+(7 6 5 4 3 2 1)
+((a b c) (a b d) (a b e) (a c d) (a c e) (a d e) (b c d) (b c e) (b d e) (c d e))
 #t
 #f
 9

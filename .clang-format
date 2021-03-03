@@ -1,0 +1,12 @@
+IndentWidth: 8
+UseTab: Always
+BreakBeforeBraces: Linux
+AllowShortIfStatementsOnASingleLine: false
+IndentCaseLabels: false
+PointerAlignment: Left
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: None
+TabWidth: 8
+SpaceAfterLogicalNot: true
+BinPackArguments: false
+ContinuationIndentWidth: 8

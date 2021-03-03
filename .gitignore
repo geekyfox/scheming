@@ -3,6 +3,8 @@
 
 # Compiled files
 scheme
+
+# Temp files
 temp/*
 callgrind.out.*
 profile.txt
